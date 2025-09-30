@@ -1,31 +1,106 @@
 
-import React, { useState } from 'react';
+
+
+import { useEffect, useState } from 'react';
+import { supabase } from '../../services/supabaseClient';
+import ClientFormModal from './components/ClientFormModal';
+import Button from '../../components/ui/Button';
 import Sidebar from '../../components/ui/Sidebar';
 import Header from '../../components/ui/Header';
-import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 
-const mockClients = [
-  {
-    id: 1,
-    name: 'Lucas Raphael',
-    cpf: '230.772.918-60',
-    status: 'Ativo',
-    type: 'Pessoa Física',
-    comments: 2,
-    commentsLabel: '2 comentários',
-  },
-];
+const getEscritorioId = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: perfis } = await supabase.from('perfis').select('escritorio_id').eq('user_id', user.id).limit(1);
+  return perfis && perfis[0]?.escritorio_id;
+};
+
 
 const ClientManagement = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('Todos');
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [escritorioId, setEscritorioId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const filtered = mockClients.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.cpf.toLowerCase().includes(search.toLowerCase())
+  // Carregar escritório e clientes
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      setLoading(true);
+      const eid = await getEscritorioId();
+      setEscritorioId(eid);
+      if (!eid) { setClients([]); setLoading(false); return; }
+      const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
+      if (!ignore) setClients(data || []);
+      setLoading(false);
+    })();
+    return () => { ignore = true; };
+  }, []);
+
+  const filtered = clients.filter(c =>
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.cpf?.toLowerCase().includes(search.toLowerCase())
   );
+
+  // CRUD Handlers
+  const openNewClientModal = () => { setEditingClient(null); setModalOpen(true); };
+  const openEditClientModal = (client) => { setEditingClient(client); setModalOpen(true); };
+  const closeModal = () => { setModalOpen(false); setEditingClient(null); setModalLoading(false); };
+
+  const reloadClients = async (eid = escritorioId) => {
+    setLoading(true);
+    const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
+    setClients(data || []);
+    setLoading(false);
+  };
+
+  const handleDeleteClient = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir este cliente?')) return;
+    setDeletingId(id);
+    setDeleteLoading(true);
+    await supabase.from('clientes').delete().eq('id', id);
+    setDeleteLoading(false);
+    setDeletingId(null);
+    reloadClients();
+  };
+
+  const handleSaveClient = async (form) => {
+    setModalLoading(true);
+    if (!escritorioId) {
+      setModalLoading(false);
+      alert('Escritório não encontrado.');
+      return;
+    }
+    let result;
+    try {
+      if (editingClient && editingClient.id) {
+        // Update
+        result = await supabase.from('clientes').update({ ...form }).eq('id', editingClient.id);
+      } else {
+        // Create
+        result = await supabase.from('clientes').insert([{ ...form, escritorio_id: escritorioId }]);
+      }
+      if (result.error) {
+        console.error('Erro ao salvar cliente:', result.error);
+        alert('Erro ao salvar cliente: ' + (result.error.message || result.error.description || result.error));
+      } else {
+        closeModal();
+        reloadClients();
+      }
+    } catch (err) {
+      console.error('Erro inesperado ao salvar cliente:', err);
+      alert('Erro inesperado ao salvar cliente: ' + err.message);
+    }
+    setModalLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#f8f9fb]">
@@ -39,7 +114,7 @@ const ClientManagement = () => {
               <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
               <p className="text-muted-foreground mt-1">Gerencie todos os seus clientes</p>
             </div>
-            <Button variant="default" iconName="UserPlus" iconPosition="left">Novo Cliente</Button>
+            <Button variant="default" iconName="UserPlus" iconPosition="left" onClick={openNewClientModal}>Novo Cliente</Button>
           </div>
 
           {/* Search and Filters */}
@@ -80,19 +155,37 @@ const ClientManagement = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <button className="hover:text-primary"><Icon name="Edit2" size={18} /></button>
+                    <button className="hover:text-primary" onClick={() => openEditClientModal(client)}><Icon name="Edit2" size={18} /></button>
                     <button className="hover:text-primary"><Icon name="Eye" size={18} /></button>
+                    <button
+                      className={`hover:text-red-600 ${deleteLoading && deletingId === client.id ? 'opacity-50 pointer-events-none' : ''}`}
+                      onClick={() => handleDeleteClient(client.id)}
+                      disabled={deleteLoading && deletingId === client.id}
+                      title="Excluir cliente"
+                    >
+                      <Icon name="Trash2" size={18} />
+                    </button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">Ativo</span>
-                  <span className="bg-black text-white px-3 py-1 rounded-full text-xs font-medium">Pessoa Física</span>
+                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">{client.status || 'Ativo'}</span>
+                  <span className="bg-black text-white px-3 py-1 rounded-full text-xs font-medium">{client.type || 'Pessoa Física'}</span>
                   <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1"><Icon name="MessageCircle" size={14} /> 2 comentários</span>
                 </div>
               </div>
             ))}
+            {loading && <div className="text-center text-muted-foreground py-8">Carregando...</div>}
+            {!loading && filtered.length === 0 && <div className="text-center text-muted-foreground py-8">Nenhum cliente encontrado.</div>}
           </div>
         </div>
+        <ClientFormModal
+          isOpen={modalOpen}
+          onClose={closeModal}
+          client={editingClient}
+          onSave={handleSaveClient}
+          loading={modalLoading}
+          escritorioId={escritorioId}
+        />
       </main>
     </div>
   );

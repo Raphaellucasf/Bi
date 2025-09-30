@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '../../services/supabaseClient';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../AppIcon';
 import Button from './Button';
@@ -7,6 +8,16 @@ const Header = ({ sidebarCollapsed = false }) => {
   const location = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [perfil, setPerfil] = useState(null);
+  // Buscar perfil do usuário logado
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: perfis } = await supabase.from('perfis').select('*').eq('user_id', user.id).limit(1);
+      if (perfis && perfis[0]) setPerfil(perfis[0]);
+    })();
+  }, []);
   const userMenuRef = useRef(null);
   const notificationsRef = useRef(null);
 
@@ -160,9 +171,10 @@ const Header = ({ sidebarCollapsed = false }) => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUserMenuOpen(false);
-    console.log('Logout clicked');
+    await supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   const unreadCount = notifications?.filter(n => !n?.read)?.length;
@@ -266,15 +278,15 @@ const Header = ({ sidebarCollapsed = false }) => {
               >
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                   <span className="text-sm font-medium text-primary-foreground">
-                    JS
+                    {perfil?.nome ? perfil.nome.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'U'}
                   </span>
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-medium text-foreground">
-                    João Silva
+                    {perfil?.nome || 'Usuário'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Advogado Senior
+                    {perfil?.oab ? `OAB: ${perfil.oab}` : ''}
                   </p>
                 </div>
                 <Icon
@@ -292,10 +304,10 @@ const Header = ({ sidebarCollapsed = false }) => {
                   <div className="py-1">
                     <div className="px-4 py-2 border-b border-border">
                       <p className="text-sm font-medium text-popover-foreground">
-                        João Silva
+                        {perfil?.nome || 'Usuário'}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        joao.silva@toralegal.com
+                        {perfil?.oab ? `OAB: ${perfil.oab}` : ''}
                       </p>
                     </div>
                     

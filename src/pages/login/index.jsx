@@ -8,37 +8,38 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
-  });
-  const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Mock user credentials
-  const mockUsers = [
-    {
-      email: 'joao.silva@toralegal.com',
-      password: 'admin123',
-      name: 'João Silva',
-      role: 'Advogado Senior',
-      office: 'Nelson'
-    },
-    {
-      email: 'maria.santos@toralegal.com',
-      password: 'adv123',
-      name: 'Maria Santos',
-      role: 'Advogada',
-      office: 'Gaspar'
-    },
-    {
-      email: 'carlos.oliveira@toralegal.com',
-      password: 'lawyer123',
-      name: 'Carlos Oliveira',
-      role: 'Advogado Junior',
-      office: 'MF Advocacia'
-    }
-  ];
-
-  const handleInputChange = (field, value) => {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f9fb]">
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-full max-w-md flex flex-col gap-4">
+          <h2 className="text-2xl font-bold mb-2 text-center">Login</h2>
+          <Input
+            name="email"
+            label="E-mail"
+            type="email"
+            value={formData.email}
+            onChange={e => handleInputChange('email', e.target.value)}
+            error={errors.email}
+            required
+          />
+          <Input
+            name="password"
+            label="Senha"
+            type="password"
+            value={formData.password}
+            onChange={e => handleInputChange('password', e.target.value)}
+            error={errors.password}
+            required
+          />
+          {errors.form && <div className="text-red-600 text-sm text-center">{errors.form}</div>}
+          <Button type="submit" disabled={isLoading}>{isLoading ? 'Entrando...' : 'Entrar'}</Button>
+          <div className="text-center mt-4">
+            <span className="text-sm text-muted-foreground">Não tem uma conta?</span>
+            <br />
+            <button type="button" className="text-blue-600 text-sm mt-1" onClick={() => navigate('/login/register')}>Cadastre-se</button>
+          </div>
+        </form>
+      </div>
+    );
     setFormData(prev => ({
       ...prev,
       [field]: value

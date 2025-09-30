@@ -1,5 +1,7 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import NewAndamentoModal from "./NewAndamentoModal";
+import { supabase } from '../../../services/supabaseClient';
 
 const TABS = [
   { label: "Detalhes" },
@@ -9,9 +11,53 @@ const TABS = [
   { label: "Documentos" },
 ];
 
+
 const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
   const [tab, setTab] = useState(0);
-  if (!isOpen) return null;
+  const [showAndamentoModal, setShowAndamentoModal] = useState(false);
+  const [andamentos, setAndamentos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  useEffect(() => {
+    if (!process?.id) return;
+    let ignore = false;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false });
+      if (!ignore) setAndamentos(data || []);
+      setLoading(false);
+    })();
+    return () => { ignore = true; };
+  }, [process]);
+
+  const reloadAndamentos = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false });
+    setAndamentos(data || []);
+    setLoading(false);
+  };
+
+  const handleAddAndamento = () => setShowAndamentoModal(true);
+  const handleCloseAndamento = () => setShowAndamentoModal(false);
+  const handleSaveAndamento = async (andamento) => {
+    if (!process?.id) return;
+    setLoading(true);
+    await supabase.from('andamentos').insert([{ ...andamento, processo_id: process.id }]);
+    setShowAndamentoModal(false);
+    reloadAndamentos();
+  };
+
+  const handleDeleteAndamento = async (id) => {
+    if (!window.confirm('Deseja excluir este andamento?')) return;
+    setDeleteLoading(true);
+    setDeletingId(id);
+    await supabase.from('andamentos').delete().eq('id', id);
+    setDeleteLoading(false);
+    setDeletingId(null);
+    reloadAndamentos();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 overflow-y-auto">
@@ -63,13 +109,54 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
           <div>
             <div className="flex justify-between items-center mb-4">
               <div className="font-semibold text-lg">Andamentos do Processo</div>
-              <button className="bg-primary text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"><span>+</span> Novo Andamento</button>
+              <button
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+                onClick={handleAddAndamento}
+              >
+                <span>+</span> Novo Andamento
+              </button>
             </div>
-            <div className="bg-[#f8fafd] rounded-lg p-8 flex flex-col items-center justify-center">
-              <div className="text-4xl mb-2">&#128196;</div>
-              <div className="font-medium mb-2">Nenhum andamento cadastrado</div>
-              <button className="bg-black text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 mt-2"><span>+</span> Adicionar Primeiro Andamento</button>
-            </div>
+            {loading ? (
+              <div className="text-center text-muted-foreground py-8">Carregando...</div>
+            ) : andamentos.length > 0 ? (
+              <div className="space-y-4">
+                {andamentos.map(and => (
+                  <div key={and.id} className="bg-white border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-base">{and.titulo}</div>
+                      <span className="text-xs text-muted-foreground">{and.prioridade}</span>
+                      <button
+                        className={`hover:text-red-600 ${deleteLoading && deletingId === and.id ? 'opacity-50 pointer-events-none' : ''}`}
+                        onClick={() => handleDeleteAndamento(and.id)}
+                        disabled={deleteLoading && deletingId === and.id}
+                        title="Excluir andamento"
+                      >
+                        &#128465;
+                      </button>
+                    </div>
+                    <div className="text-sm text-muted-foreground">{and.tipo}</div>
+                    <div className="text-xs text-gray-400">{and.dataEvento ? new Date(and.dataEvento).toLocaleString('pt-BR') : ''}</div>
+                    {and.descricao && <div className="text-sm mt-1">{and.descricao}</div>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-[#f8fafd] rounded-lg p-8 flex flex-col items-center justify-center">
+                <div className="text-4xl mb-2">&#128196;</div>
+                <div className="font-medium mb-2">Nenhum andamento cadastrado</div>
+                <button
+                  className="bg-black text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 mt-2"
+                  onClick={handleAddAndamento}
+                >
+                  <span>+</span> Adicionar Primeiro Andamento
+                </button>
+              </div>
+            )}
+            <NewAndamentoModal
+              open={showAndamentoModal}
+              onClose={handleCloseAndamento}
+              onSave={handleSaveAndamento}
+            />
           </div>
         )}
         {tab === 2 && (
