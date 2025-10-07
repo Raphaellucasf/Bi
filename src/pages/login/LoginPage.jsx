@@ -10,22 +10,6 @@ export default function LoginPage({ onLogin }) {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (data?.user) {
-        // Cria perfil se não existir
-        const { data: perfis, error: perfilError } = await supabase
-          .from('perfis')
-          .select('id')
-          .eq('user_id', data.user.id)
-          .limit(1);
-        if (!perfilError && (!perfis || perfis.length === 0)) {
-          await supabase.from('perfis').insert({ user_id: data.user.id, escritorio_id: null });
-        }
-        navigate('/', { replace: true });
-      }
-    });
-  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -45,18 +29,10 @@ export default function LoginPage({ onLogin }) {
       setError('Não foi possível fazer login. Verifique seu e-mail, senha e se sua conta está confirmada.');
       return;
     }
-    // Cria perfil se não existir
-    const { data: perfis, error: perfilError } = await supabase
-      .from('perfis')
-      .select('id')
-      .eq('user_id', user.id)
-      .limit(1);
-    if (!perfilError && (!perfis || perfis.length === 0)) {
-      await supabase.from('perfis').insert({ user_id: user.id, escritorio_id: null });
-    }
+    // Apenas autentica e redireciona
     onLogin && onLogin(user);
     setLoading(false);
-    navigate('/', { replace: true });
+  navigate('/process-management', { replace: true });
   };
 
   return (

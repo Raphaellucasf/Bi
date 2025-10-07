@@ -1,21 +1,60 @@
+// Funções de formatação
+function formatCPF(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function formatRG(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1})$/, "$1-$2");
+}
+
+function formatPIS(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{5})(\d)/, "$1.$2")
+    .replace(/(\d{2})(\d{1})$/, "$1-$2");
+}
+
+function formatTelefone(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d{4})$/, "$1-$2");
+}
+
+function formatTelefoneContato(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{4})(\d{4})$/, "$1-$2");
+}
 
 import React, { useState, useEffect } from "react";
 import Button from "../../../components/ui/Button";
 import Select from "../../../components/ui/Select";
+import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
 import Input from "../../../components/ui/Input";
 import { getIndicadores, addIndicador } from "../../../services/indicadoresService";
 
 const initialState = {
-  name: "",
-  cpf: "",
+  nome_completo: "",
+  cpf_cnpj: "",
   status: "Ativo",
-  type: "Pessoa Física",
+  tipo_pessoa: "Pessoa Física",
   indicado_por: "",
   email: "",
   rg: "",
   pis: "",
-  telefone: "",
-  telefone_contato: "",
+  telefone_celular: "",
+  telefone_para_contato: "",
   endereco: "",
   naturalidade: "",
   nome_mae: "",
@@ -54,8 +93,25 @@ const ClientFormModal = ({ isOpen, onClose, client, onSave, loading, escritorioI
   }, [isOpen, escritorioId]);
 
   const handleChange = (e) => {
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    let formatted = value;
+    if (name === "cpf_cnpj") {
+      formatted = form.tipo_pessoa === "Pessoa Jurídica" ? formatCNPJ(value) : formatCPF(value);
+    }
+    if (name === "rg") formatted = formatRG(value);
+    if (name === "pis") formatted = formatPIS(value);
+  if (name === "telefone_celular") formatted = formatTelefone(value);
+  if (name === "telefone_para_contato") formatted = formatTelefoneContato(value);
+    setForm(f => ({ ...f, [name]: formatted }));
   };
+// Função para formatar CNPJ
+function formatCNPJ(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+}
 
   const handleSelectChange = (name, value) => {
     setForm(f => ({ ...f, [name]: value }));
@@ -81,8 +137,8 @@ const ClientFormModal = ({ isOpen, onClose, client, onSave, loading, escritorioI
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name || !form.cpf) {
-      setError("Nome e CPF são obrigatórios");
+    if (!form.nome_completo || !form.cpf_cnpj) {
+      setError(`Nome e ${form.type === "Pessoa Jurídica" ? "CNPJ" : "CPF"} são obrigatórios`);
       return;
     }
     setError("");
@@ -95,26 +151,33 @@ const ClientFormModal = ({ isOpen, onClose, client, onSave, loading, escritorioI
       <div className="bg-white p-6 rounded shadow-lg w-full max-w-2xl">
         <h2 className="text-lg font-bold mb-4">{client ? "Editar Cliente" : "Novo Cliente"}</h2>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input name="name" label="Nome Completo *" placeholder="Nome completo do cliente" value={form.name} onChange={handleChange} required />
+          <Input name="nome_completo" label="Nome Completo *" placeholder="Nome completo do cliente" value={form.nome_completo} onChange={handleChange} required />
           <Input name="nome_mae" label="Nome da Mãe" placeholder="Nome da mãe" value={form.nome_mae} onChange={handleChange} />
           <Input name="data_nascimento" label="Data de Nascimento" type="date" value={form.data_nascimento} onChange={handleChange} />
           <Input name="data_entrevista" label="Data da Entrevista Inicial" type="date" value={form.data_entrevista} onChange={handleChange} />
           <Input name="email" label="Email" placeholder="cliente@email.com" value={form.email} onChange={handleChange} />
           <Input name="naturalidade" label="Naturalidade" placeholder="Ex: Franco da Rocha - SP" value={form.naturalidade} onChange={handleChange} />
           <Input name="rg" label="RG" placeholder="00.000.000-0" value={form.rg} onChange={handleChange} />
-          <Input name="cpf" label="CPF *" placeholder="000.000.000-00" value={form.cpf} onChange={handleChange} required />
-          <Input name="pis" label="PIS" placeholder="000.00000.00-0" value={form.pis} onChange={handleChange} />
-          <Input name="telefone" label="Telefone Celular" placeholder="(11) 99999-9999" value={form.telefone} onChange={handleChange} />
-          <Input name="telefone_contato" label="Telefone para Contato" placeholder="(11) 3333-3333" value={form.telefone_contato} onChange={handleChange} />
-          <Select
-            name="type"
-            label="Tipo de Cliente"
-            options={typeOptions}
-            value={form.type}
-            onChange={v => handleSelectChange("type", v)}
+          <Input
+            name="cpf_cnpj"
+            label={form.type === "Pessoa Jurídica" ? "CNPJ *" : "CPF *"}
+            placeholder={form.type === "Pessoa Jurídica" ? "00.000.000/0000-00" : "000.000.000-00"}
+            value={form.cpf_cnpj}
+            onChange={handleChange}
             required
           />
-          <Select
+          <Input name="pis" label="PIS" placeholder="000.00000.00-0" value={form.pis} onChange={handleChange} />
+          <Input name="telefone_celular" label="Telefone Celular" placeholder="(11) 99999-9999" value={form.telefone_celular} onChange={handleChange} />
+          <Input name="telefone_para_contato" label="Telefone para Contato" placeholder="(11) 3333-3333" value={form.telefone_para_contato} onChange={handleChange} />
+          <ShadcnSelect
+            name="tipo_pessoa"
+            label="Tipo de Cliente"
+            options={typeOptions}
+            value={form.tipo_pessoa}
+            onChange={v => handleSelectChange("tipo_pessoa", v)}
+            required
+          />
+          <ShadcnSelect
             name="status"
             label="Status"
             options={statusOptions}

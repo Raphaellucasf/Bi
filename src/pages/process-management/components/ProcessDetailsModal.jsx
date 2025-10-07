@@ -13,6 +13,7 @@ const TABS = [
 
 
 const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
+  const [empresa, setEmpresa] = useState(null);
   const [tab, setTab] = useState(0);
   const [showAndamentoModal, setShowAndamentoModal] = useState(false);
   const [andamentos, setAndamentos] = useState([]);
@@ -25,8 +26,16 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
     let ignore = false;
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false });
-      if (!ignore) setAndamentos(data || []);
+      // Busca andamentos
+      const { data: andamentosData } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false });
+      if (!ignore) setAndamentos(andamentosData || []);
+      // Busca empresa vinculada ao processo
+      if (process.empresa_id) {
+        const { data: empresaData } = await supabase.from('empresas').select('*').eq('id', process.empresa_id).single();
+        if (!ignore) setEmpresa(empresaData || null);
+      } else {
+        setEmpresa(null);
+      }
       setLoading(false);
     })();
     return () => { ignore = true; };
@@ -34,7 +43,7 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
 
   const reloadAndamentos = async () => {
     setLoading(true);
-    const { data } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false });
+  const { data } = await supabase.from('andamentos').select('*').eq('processo_id', process.id).order('dataEvento', { ascending: false }); // already lowercase
     setAndamentos(data || []);
     setLoading(false);
   };
@@ -44,7 +53,7 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
   const handleSaveAndamento = async (andamento) => {
     if (!process?.id) return;
     setLoading(true);
-    await supabase.from('andamentos').insert([{ ...andamento, processo_id: process.id }]);
+  await supabase.from('andamentos').insert([{ ...andamento, processo_id: process.id }]); // already lowercase
     setShowAndamentoModal(false);
     reloadAndamentos();
   };
@@ -53,7 +62,7 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
     if (!window.confirm('Deseja excluir este andamento?')) return;
     setDeleteLoading(true);
     setDeletingId(id);
-    await supabase.from('andamentos').delete().eq('id', id);
+  await supabase.from('andamentos').delete().eq('id', id); // already lowercase
     setDeleteLoading(false);
     setDeletingId(null);
     reloadAndamentos();
@@ -165,7 +174,22 @@ const ProcessDetailsModal = ({ isOpen, onClose, process }) => {
               <div className="font-semibold text-lg">Partes Contrárias</div>
               <button className="bg-black text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2"><span>+</span> Adicionar</button>
             </div>
-            <div className="text-muted-foreground">Nenhuma parte contrária cadastrada.</div>
+            {empresa ? (
+              <div className="bg-[#f8fafd] rounded-lg p-6 mb-4">
+                <div className="font-semibold mb-2">Razão Social: {empresa.razao_social}</div>
+                <div className="text-sm text-muted-foreground mb-1">Nome Fantasia: {empresa.nome_fantasia}</div>
+                <div className="text-sm text-muted-foreground mb-1">CNPJ: {empresa.cnpj}</div>
+                <div className="text-sm text-muted-foreground mb-1">Endereço (RFB): {empresa.endereco_rfb}</div>
+                <div className="text-sm text-muted-foreground mb-1">Endereço Trabalho: {empresa.endereco_trabalho}</div>
+                <div className="text-sm text-muted-foreground mb-1">Advogado: {empresa.advogado}</div>
+                <div className="text-sm text-muted-foreground mb-1">OAB: {empresa.oab}</div>
+                <div className="text-sm text-muted-foreground mb-1">Telefone: {empresa.telefone}</div>
+                <div className="text-sm text-muted-foreground mb-1">Email: {empresa.email}</div>
+                <div className="text-sm text-muted-foreground mb-1">Observações: {empresa.observacoes}</div>
+              </div>
+            ) : (
+              <div className="text-muted-foreground">Nenhuma parte contrária cadastrada.</div>
+            )}
           </div>
         )}
         {tab === 3 && (

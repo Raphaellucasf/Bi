@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import Button from "../../../components/ui/Button";
 import Select from "../../../components/ui/Select";
+import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
 
 const tipoAndamentoOptions = [
   { label: "Petição Inicial", value: "peticao_inicial" },
@@ -50,7 +51,7 @@ export default function NewAndamentoModal({ open, onClose, onSave }) {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Tipo de Andamento *</label>
-            <Select
+            <ShadcnSelect
               options={tipoAndamentoOptions}
               value={tipo}
               onChange={setTipo}
@@ -58,7 +59,7 @@ export default function NewAndamentoModal({ open, onClose, onSave }) {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Prioridade</label>
-            <Select
+            <ShadcnSelect
               options={prioridadeOptions}
               value={prioridade}
               onChange={setPrioridade}

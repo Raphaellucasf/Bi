@@ -11,12 +11,19 @@ const Header = ({ sidebarCollapsed = false }) => {
   const [perfil, setPerfil] = useState(null);
   // Buscar perfil do usuário logado
   useEffect(() => {
-    (async () => {
+    let ignore = false;
+    async function fetchPerfil() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data: perfis } = await supabase.from('perfis').select('*').eq('user_id', user.id).limit(1);
-      if (perfis && perfis[0]) setPerfil(perfis[0]);
-    })();
+      if (!ignore && perfis && perfis[0]) setPerfil(perfis[0]);
+    }
+    fetchPerfil();
+    // Escuta mudanças no perfil
+    const channel = supabase.channel('perfil-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'perfis' }, fetchPerfil)
+      .subscribe();
+    return () => { ignore = true; channel.unsubscribe(); };
   }, []);
   const userMenuRef = useRef(null);
   const notificationsRef = useRef(null);
@@ -80,23 +87,11 @@ const Header = ({ sidebarCollapsed = false }) => {
     
     switch (currentPath) {
       case '/process-management':
-        return (
-          <Button variant="default" iconName="Plus" iconPosition="left">
-            Novo Processo
-          </Button>
-        );
+        return null;
       case '/client-management':
-        return (
-          <Button variant="default" iconName="UserPlus" iconPosition="left">
-            Novo Cliente
-          </Button>
-        );
+        return null;
       case '/tasks':
-        return (
-          <Button variant="default" iconName="Plus" iconPosition="left">
-            Nova Tarefa
-          </Button>
-        );
+        return null;
       case '/document-management':
         return (
           <Button variant="default" iconName="Upload" iconPosition="left">
@@ -104,11 +99,7 @@ const Header = ({ sidebarCollapsed = false }) => {
           </Button>
         );
       case '/financial-tracking':
-        return (
-          <Button variant="default" iconName="Plus" iconPosition="left">
-            Nova Transação
-          </Button>
-        );
+        return null;
       default:
         return null;
     }
@@ -278,12 +269,12 @@ const Header = ({ sidebarCollapsed = false }) => {
               >
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                   <span className="text-sm font-medium text-primary-foreground">
-                    {perfil?.nome ? perfil.nome.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'U'}
+                    {perfil?.nome_completo ? perfil.nome_completo.split(' ')[0][0].toUpperCase() : 'U'}
                   </span>
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-medium text-foreground">
-                    {perfil?.nome || 'Usuário'}
+                    {perfil?.nome_completo ? perfil.nome_completo.split(' ')[0] : 'Usuário'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {perfil?.oab ? `OAB: ${perfil.oab}` : ''}
@@ -304,7 +295,7 @@ const Header = ({ sidebarCollapsed = false }) => {
                   <div className="py-1">
                     <div className="px-4 py-2 border-b border-border">
                       <p className="text-sm font-medium text-popover-foreground">
-                        {perfil?.nome || 'Usuário'}
+                        {perfil?.nome_completo ? perfil.nome_completo.split(' ')[0] : 'Usuário'}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {perfil?.oab ? `OAB: ${perfil.oab}` : ''}
@@ -320,21 +311,23 @@ const Header = ({ sidebarCollapsed = false }) => {
                       Meu Perfil
                     </Link>
                     
-                    <button
+                    <Link
+                      to="/settings"
                       onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors duration-200"
+                      className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors duration-200"
                     >
                       <Icon name="Settings" size={16} className="mr-3" />
                       Configurações
-                    </button>
+                    </Link>
                     
-                    <button
+                    <Link
+                      to="/support"
                       onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors duration-200"
+                      className="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-muted transition-colors duration-200"
                     >
                       <Icon name="HelpCircle" size={16} className="mr-3" />
                       Ajuda & Suporte
-                    </button>
+                    </Link>
                     
                     <div className="border-t border-border mt-1 pt-1">
                       <button

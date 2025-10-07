@@ -5,12 +5,17 @@ import ErrorBoundary from "components/ErrorBoundary";
 import NotFound from "pages/NotFound";
 
 import Dashboard from './pages/dashboard';
+import Settings from './pages/settings';
+import Support from './pages/support';
 import DocumentManagement from './pages/document-management';
 import UserProfileSettings from './pages/user-profile-settings';
 import ProcessManagement from './pages/process-management';
 import FinancialTracking from './pages/financial-tracking';
 import ClientManagement from './pages/client-management';
 import Tasks from './pages/tasks';
+import Audiencias from './pages/tasks/audiencias';
+import Prazos from './pages/tasks/prazos';
+import Reunioes from './pages/tasks/reunioes';
 import Publications from './pages/publications';
 import ClientPortal from './pages/client-portal';
 import LoginPage from './pages/login/LoginPage';
@@ -18,6 +23,7 @@ import RegisterPage from './pages/login/Register';
 import { supabase } from './services/supabaseClient';
 import SelectEscritorioModal from './components/ui/SelectEscritorioModal';
 import Detetive from './pages/detetive';
+import Monitoring from './pages/monitoring';
 
 
 
@@ -65,7 +71,7 @@ function RequireAuth({ children }) {
 
   // Redireciona para conclusão do cadastro se perfil incompleto
   const perfilIncompleto = perfil && (
-    !perfil.nome || !perfil.funcao || !perfil.telefone || !perfil.escritorio_id
+    !perfil.nome_completo || !perfil.funcao || !perfil.telefone || !perfil.escritorio_id
   );
 
   if (loading) return null;
@@ -87,18 +93,24 @@ const Routes = () => {
           {/* Authentication */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/login/register" element={<RegisterPage />} />
-          {/* Protected routes */}
-          <Route path="/" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
+          {/* Redirect root to process-management */}
+          <Route path="/" element={<Navigate to="/process-management" replace />} />
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/process-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
           <Route path="/client-management" element={<RequireAuth><ClientManagement /></RequireAuth>} />
           <Route path="/tasks" element={<RequireAuth><Tasks /></RequireAuth>} />
+          <Route path="/tasks/audiencias" element={<RequireAuth><Audiencias /></RequireAuth>} />
+          <Route path="/tasks/prazos" element={<RequireAuth><Prazos /></RequireAuth>} />
+          <Route path="/tasks/reunioes" element={<RequireAuth><Reunioes /></RequireAuth>} />
           <Route path="/document-management" element={<RequireAuth><DocumentManagement /></RequireAuth>} />
           <Route path="/publications" element={<RequireAuth><Publications /></RequireAuth>} />
           <Route path="/financial-tracking" element={<RequireAuth><FinancialTracking /></RequireAuth>} />
           <Route path="/client-portal" element={<RequireAuth><ClientPortal /></RequireAuth>} />
           <Route path="/user-profile-settings" element={<RequireAuth><UserProfileSettings /></RequireAuth>} />
           <Route path="/detetive" element={<RequireAuth><Detetive /></RequireAuth>} />
+          <Route path="/monitoring" element={<RequireAuth><Monitoring /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+          <Route path="/support" element={<RequireAuth><Support /></RequireAuth>} />
           {/* Legacy route redirect */}
           <Route path="/case-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />

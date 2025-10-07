@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button";
+import Sidebar from "../../components/ui/Sidebar";
+import Header from "../../components/ui/Header";
 
 const fetchCnpjData = async (cnpj) => {
 const fetchCpfData = async (cpf) => {
@@ -165,7 +167,11 @@ const Detetive = () => {
   };
 
   return (
-    <div className="p-8">
+    <div className="min-h-screen bg-[#f7f8fa]">
+      <Sidebar />
+      <Header />
+      <main className="transition-all duration-300 pt-16 ml-0 md:ml-60">
+        <div className="p-8">
       <div className="flex items-center mb-6">
         <Button variant="outline" onClick={() => navigate(-1)} className="mr-4">Voltar</Button>
         <h1 className="text-2xl font-bold">Detetive</h1>
@@ -292,6 +298,8 @@ const Detetive = () => {
         ))}
       </div>
       <div className="mt-6 text-xs text-gray-500">* Algumas consultas utilizam integrações públicas gratuitas e podem ter limitações.</div>
+        </div>
+      </main>
     </div>
   );
 };

@@ -14,15 +14,22 @@ const Sidebar = ({ isCollapsed = false, onToggle }) => {
         { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard', tooltip: 'Visão geral da prática' },
         { label: 'Processos', path: '/process-management', icon: 'FileText', tooltip: 'Gerenciamento de processos' },
         { label: 'Clientes', path: '/client-management', icon: 'Users', tooltip: 'Gerenciamento de clientes' },
-        { label: 'Financeiro', path: '/financial-tracking', icon: 'DollarSign', tooltip: 'Controle financeiro' },
-        { label: 'Tarefas', path: '/tasks', icon: 'CheckSquare', tooltip: 'Gerenciamento de tarefas' },
+  { label: 'Financeiro', path: '/financial-tracking', icon: 'DollarSign', tooltip: 'Controle financeiro' },
+      ]
+    },
+    {
+      title: 'TAREFAS',
+      items: [
+        { label: 'Audiências', path: '/tasks/audiencias', icon: 'Calendar', tooltip: 'Audiências' },
+        { label: 'Prazos', path: '/tasks/prazos', icon: 'Clock', tooltip: 'Prazos' },
+        { label: 'Reuniões', path: '/tasks/reunioes', icon: 'Users', tooltip: 'Reuniões' },
       ]
     },
     {
       title: 'AUTOMAÇÃO & IA',
       items: [
         { label: 'Detetive', path: '/detetive', icon: 'Search', tooltip: 'Busca de bens e informações' },
-        { label: 'Acompanhamento', path: '/monitoring', icon: 'Globe', tooltip: 'Acompanhamento' },
+        { label: 'Acompanhamento', path: '/monitoring', icon: 'Globe', tooltip: 'Acompanhamento processual' },
       ]
     },
     {

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import ClientFormModal from './components/ClientFormModal';
+import { useMemo } from 'react';
 import Button from '../../components/ui/Button';
 import Sidebar from '../../components/ui/Sidebar';
 import Header from '../../components/ui/Header';
@@ -26,6 +27,8 @@ const ClientManagement = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  const [detailsClient, setDetailsClient] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [escritorioId, setEscritorioId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -38,7 +41,7 @@ const ClientManagement = () => {
       const eid = await getEscritorioId();
       setEscritorioId(eid);
       if (!eid) { setClients([]); setLoading(false); return; }
-      const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
+  const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
       if (!ignore) setClients(data || []);
       setLoading(false);
     })();
@@ -46,18 +49,20 @@ const ClientManagement = () => {
   }, []);
 
   const filtered = clients.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.cpf?.toLowerCase().includes(search.toLowerCase())
+    c.nome_completo?.toLowerCase().includes(search.toLowerCase()) ||
+    c.cpf_cnpj?.toLowerCase().includes(search.toLowerCase())
   );
 
   // CRUD Handlers
   const openNewClientModal = () => { setEditingClient(null); setModalOpen(true); };
   const openEditClientModal = (client) => { setEditingClient(client); setModalOpen(true); };
+  const openDetailsModal = (client) => { setDetailsClient(client); setShowDetailsModal(true); };
+  const closeDetailsModal = () => { setDetailsClient(null); setShowDetailsModal(false); };
   const closeModal = () => { setModalOpen(false); setEditingClient(null); setModalLoading(false); };
 
   const reloadClients = async (eid = escritorioId) => {
     setLoading(true);
-    const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
+  const { data } = await supabase.from('clientes').select('*').eq('escritorio_id', eid);
     setClients(data || []);
     setLoading(false);
   };
@@ -66,11 +71,22 @@ const ClientManagement = () => {
     if (!window.confirm('Tem certeza que deseja excluir este cliente?')) return;
     setDeletingId(id);
     setDeleteLoading(true);
-    await supabase.from('clientes').delete().eq('id', id);
+  await supabase.from('clientes').delete().eq('id', id);
     setDeleteLoading(false);
     setDeletingId(null);
     reloadClients();
   };
+
+  function formatDateToYMD(dateStr) {
+    if (!dateStr) return "";
+    // Accepts dd/mm/yyyy or yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    const parts = dateStr.split("/");
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    }
+    return dateStr;
+  }
 
   const handleSaveClient = async (form) => {
     setModalLoading(true);
@@ -79,14 +95,24 @@ const ClientManagement = () => {
       alert('Escritório não encontrado.');
       return;
     }
+    // Formatar datas para YYYY-MM-DD, enviar null se vazio
+    const formatOrNull = (dateStr) => {
+      const val = formatDateToYMD(dateStr);
+      return val === "" ? null : val;
+    };
+    const formToSave = {
+      ...form,
+      data_nascimento: formatOrNull(form.data_nascimento),
+      data_entrevista: formatOrNull(form.data_entrevista)
+    };
     let result;
     try {
       if (editingClient && editingClient.id) {
         // Update
-        result = await supabase.from('clientes').update({ ...form }).eq('id', editingClient.id);
+  result = await supabase.from('clientes').update({ ...formToSave }).eq('id', editingClient.id);
       } else {
         // Create
-        result = await supabase.from('clientes').insert([{ ...form, escritorio_id: escritorioId }]);
+  result = await supabase.from('clientes').insert([{ ...formToSave, escritorio_id: escritorioId }]);
       }
       if (result.error) {
         console.error('Erro ao salvar cliente:', result.error);
@@ -149,14 +175,14 @@ const ClientManagement = () => {
               <div key={client.id} className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-lg font-semibold text-foreground">{client.name}</div>
+                    <div className="text-lg font-semibold text-foreground">{client.nome_completo}</div>
                     <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1"><Icon name="FileText" size={16} /> CPF: {client.cpf}</span>
+                      <span className="flex items-center gap-1"><Icon name="FileText" size={16} /> {client.tipo_pessoa === 'Pessoa Jurídica' ? 'CNPJ' : 'CPF'}: {client.cpf_cnpj}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <button className="hover:text-primary" onClick={() => openEditClientModal(client)}><Icon name="Edit2" size={18} /></button>
-                    <button className="hover:text-primary"><Icon name="Eye" size={18} /></button>
+                    <button className="hover:text-primary" onClick={() => openDetailsModal(client)}><Icon name="Eye" size={18} /></button>
                     <button
                       className={`hover:text-red-600 ${deleteLoading && deletingId === client.id ? 'opacity-50 pointer-events-none' : ''}`}
                       onClick={() => handleDeleteClient(client.id)}
@@ -169,7 +195,7 @@ const ClientManagement = () => {
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
                   <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">{client.status || 'Ativo'}</span>
-                  <span className="bg-black text-white px-3 py-1 rounded-full text-xs font-medium">{client.type || 'Pessoa Física'}</span>
+                  <span className="bg-black text-white px-3 py-1 rounded-full text-xs font-medium">{client.tipo_pessoa || 'Pessoa Física'}</span>
                   <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1"><Icon name="MessageCircle" size={14} /> 2 comentários</span>
                 </div>
               </div>
@@ -186,7 +212,72 @@ const ClientManagement = () => {
           loading={modalLoading}
           escritorioId={escritorioId}
         />
+        {showDetailsModal && detailsClient && (
+          <ClientDetailsModal
+            client={detailsClient}
+            onClose={closeDetailsModal}
+          />
+        )}
+
       </main>
+    </div>
+  );
+};
+
+
+// Modal de detalhes do cliente
+const ClientDetailsModal = ({ client, onClose }) => {
+  const getFirstNames = nome => nome?.split(' ').slice(0,2).join(' ');
+  const comentarios = useMemo(() => [
+    { tipo: 'Ligação', texto: 'eu quero chocolate', data: '16/09/2025 17:25' },
+    { tipo: 'Reunião', texto: 'Primeiro cliente e teste', data: '16/09/2025 17:25' }
+  ], []);
+  const processos = useMemo(() => [
+    { id: 1, titulo: 'Processo 1', numero: '12345', status: 'Ativo' },
+    { id: 2, titulo: 'Processo 2', numero: '67890', status: 'Pendente' }
+  ], []);
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded shadow-lg w-full max-w-3xl relative">
+        <button className="absolute top-2 right-2 text-muted-foreground" onClick={onClose}>×</button>
+        <h2 className="text-2xl font-bold mb-2">{getFirstNames(client.nome_completo)}</h2>
+        <div className="flex gap-6 mb-4">
+          <div className="flex-1 bg-gray-50 rounded p-4">
+            <div className="font-semibold mb-2">Informações Pessoais</div>
+            <div className="mb-1">CPF: <span className="font-bold">{client.cpf_cnpj}</span></div>
+            <div className="mb-1">Telefone: <span className="font-bold">{client.telefone_celular}</span></div>
+            <div className="mb-1">Email: <span className="font-bold">{client.email}</span></div>
+          </div>
+          <div className="flex-1 bg-gray-50 rounded p-4">
+            <div className="font-semibold mb-2">Processos</div>
+            {processos.length === 0 ? <div className="text-muted-foreground">Nenhum processo</div> : (
+              <ul className="space-y-2">
+                {processos.map(proc => (
+                  <li key={proc.id} className="bg-blue-50 rounded p-2 flex justify-between items-center cursor-pointer hover:bg-blue-100" onClick={() => alert('Abrir processo ' + proc.id)}>
+                    <div>
+                      <div className="font-semibold">{proc.titulo}</div>
+                      <div className="text-xs text-muted-foreground">Nº {proc.numero} - {proc.status}</div>
+                    </div>
+                    <Icon name="Eye" size={16} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="font-semibold mb-2">Comentários ({comentarios.length})</div>
+          <div className="space-y-2">
+            {comentarios.map((c, i) => (
+              <div key={i} className="border rounded p-2 flex items-center gap-3">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${c.tipo === 'Ligação' ? 'bg-yellow-100 text-yellow-700' : c.tipo === 'Reunião' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{c.tipo}</span>
+                <span className="flex-1">{c.texto}</span>
+                <span className="text-xs text-muted-foreground">{c.data}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
