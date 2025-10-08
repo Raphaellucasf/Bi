@@ -2,13 +2,29 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../AppIcon';
+import NotificationBell from './NotificationBell';
 import Button from './Button';
 
 const Header = ({ sidebarCollapsed = false }) => {
+  // Notification system states
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef(null);
+  // Calculate unread notifications count
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const [userId, setUserId] = useState(null);
+  useEffect(() => {
+    async function fetchUserId() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+    }
+    fetchUserId();
+  }, []);
   const location = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  
   const [perfil, setPerfil] = useState(null);
+  // ...existing code...
   // Buscar perfil do usuário logado
   useEffect(() => {
     let ignore = false;
@@ -26,7 +42,7 @@ const Header = ({ sidebarCollapsed = false }) => {
     return () => { ignore = true; channel.unsubscribe(); };
   }, []);
   const userMenuRef = useRef(null);
-  const notificationsRef = useRef(null);
+  
 
   const primaryNavItems = [
     {
@@ -105,34 +121,6 @@ const Header = ({ sidebarCollapsed = false }) => {
     }
   };
 
-  // Mock notifications data (agora controlado por estado)
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: 'deadline',
-      title: 'Prazo de audiência se aproximando',
-      message: 'Audiência do processo PROC-2024-001 em 2 dias',
-      time: '30 min',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'update',
-      title: 'Nova publicação encontrada',
-      message: 'Publicação relevante para o cliente Maria Silva',
-      time: '1h',
-      read: false
-    },
-    {
-      id: 3,
-      type: 'task',
-      title: 'Tarefa vencendo hoje',
-      message: 'Revisar contrato - Cliente João Santos',
-      time: '2h',
-      read: true
-    }
-  ]);
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef?.current && !userMenuRef?.current?.contains(event?.target)) {
@@ -168,7 +156,7 @@ const Header = ({ sidebarCollapsed = false }) => {
     window.location.href = '/login';
   };
 
-  const unreadCount = notifications?.filter(n => !n?.read)?.length;
+  
 
   return (
     <header
@@ -189,6 +177,7 @@ const Header = ({ sidebarCollapsed = false }) => {
           
           <div className="flex items-center space-x-4">
             {getPageActions()}
+            <NotificationBell userId={userId} />
             
             {/* Notifications */}
             <div className="relative" ref={notificationsRef}>

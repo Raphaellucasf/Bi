@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../../services/supabaseClient';
 import Sidebar from '../../components/ui/Sidebar';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
@@ -18,87 +19,15 @@ const Tasks = () => {
     type: ''
   });
 
-  // Mock tasks data with post-it style
-  const mockTasks = [
-    {
-      id: 1,
-      title: 'Audiência - Processo Maria Silva',
-      description: 'Audiência UNA PRESENCIAL - Processo PROC-2024-0001',
-      type: 'audiencia',
-      priority: 'alta',
-      status: 'pendente',
-      dueDate: '2024-02-15T14:00:00Z',
-      processNumber: 'PROC-2024-0001',
-      clientName: 'Maria Silva Santos',
-      details: {
-        tipo: 'UNA PRESENCIAL',
-        local: 'Fórum Central - Sala 203',
-        testemunhas: 'João Santos, Maria Oliveira'
-      },
-      createdDate: '2024-01-20T10:00:00Z',
-      color: 'yellow'
-    },
-    {
-      id: 2,
-      title: 'Prazo para Contestação',
-      description: 'Prazo para apresentar contestação no processo trabalhista',
-      type: 'prazo',
-      priority: 'alta',
-      status: 'pendente',
-      dueDate: '2024-02-10T23:59:00Z',
-      processNumber: 'PROC-2024-0002',
-      clientName: 'Carlos Eduardo Oliveira',
-      createdDate: '2024-01-25T09:00:00Z',
-      color: 'red'
-    },
-    {
-      id: 3,
-      title: 'Reunião com Cliente',
-      description: 'Reunião para discussão de estratégia processual',
-      type: 'reuniao',
-      priority: 'média',
-      status: 'pendente',
-      dueDate: '2024-02-12T15:30:00Z',
-      processNumber: 'PROC-2024-0003',
-      clientName: 'Ana Paula Costa',
-      createdDate: '2024-01-22T14:00:00Z',
-      color: 'blue'
-    },
-    {
-      id: 4,
-      title: 'Julgamento - TRT 2ª Região',
-      description: 'Publicação via DEJT esperada',
-      type: 'julgamento',
-      priority: 'alta',
-      status: 'aguardando',
-      dueDate: '2024-02-20T08:00:00Z',
-      processNumber: 'PROC-2024-0004',
-      clientName: 'Roberto Ferreira Lima',
-      details: {
-        tipo: 'PUBLICAÇÃO VIA DEJT / DJE',
-        turmaJulgadora: '1ª Turma do TRT 2ª Região'
-      },
-      createdDate: '2024-01-18T11:00:00Z',
-      color: 'green'
-    },
-    {
-      id: 5,
-      title: 'Elaborar Petição Inicial',
-      description: 'Processo de indenização por danos morais',
-      type: 'documento',
-      priority: 'média',
-      status: 'em_andamento',
-      dueDate: '2024-02-18T17:00:00Z',
-      processNumber: null,
-      clientName: 'Novo Cliente',
-      createdDate: '2024-01-28T16:00:00Z',
-      color: 'purple'
-    }
-  ];
+
 
   useEffect(() => {
-    setTasks(mockTasks);
-    
+    async function fetchTasks() {
+      const { data, error } = await supabase.from('andamentos').select('*');
+      if (!error && data) setTasks(data);
+    }
+    fetchTasks();
+
     // Setup notification system
     const checkNotifications = () => {
       const now = new Date();
@@ -107,12 +36,12 @@ const Tasks = () => {
           const dueDate = new Date(task.dueDate);
           const timeDiff = dueDate - now;
           const minutesDiff = Math.floor(timeDiff / (1000 * 60));
-          
+
           // Show notification 30 minutes before
           if (minutesDiff === 30) {
             showNotification(task);
           }
-          
+
           // Show notification 1 day before for hearings
           if (task?.type === 'audiencia' && minutesDiff === 1440) {
             showNotification(task, 'Lembrete: Audiência amanhã');
@@ -162,14 +91,17 @@ const Tasks = () => {
     setShowNewTaskModal(true);
   };
 
-  const handleSaveTask = (newTask) => {
-    const task = {
+  const handleSaveTask = async (newTask) => {
+    // Adiciona cor e data de criação
+    const taskToSave = {
       ...newTask,
-      id: Date.now(),
-      createdDate: new Date()?.toISOString(),
-      color: ['yellow', 'red', 'blue', 'green', 'purple', 'orange']?.[Math.floor(Math.random() * 6)]
+      created_at: new Date()?.toISOString(),
+      cor: ['yellow', 'red', 'blue', 'green', 'purple', 'orange'][Math.floor(Math.random() * 6)]
     };
-    setTasks(prev => [task, ...prev]);
+    const { data, error } = await supabase.from('andamentos').insert([taskToSave]).select();
+    if (!error && data) {
+      setTasks(prev => [data[0], ...prev]);
+    }
   };
 
   const handleUpdateTask = (taskId, updates) => {

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import Button from "../../../components/ui/Button";
+import AndamentoModal from "./AndamentoModal";
 
 
 function ProcessoDetalhesModal({ processoId, open, onClose }) {
+  const [showAndamentoModal, setShowAndamentoModal] = useState(false);
   const [aba, setAba] = useState(0);
   const [processo, setProcesso] = useState(null);
   const [andamentos, setAndamentos] = useState([]);
@@ -89,22 +91,37 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
           {aba === 1 && (
             <div>
               {/* Andamentos */}
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold">Andamentos</h3>
-                <Button>+ Novo Andamento</Button>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-lg">Andamentos</h3>
+                <Button onClick={() => setShowAndamentoModal(true)}>+ Novo Andamento</Button>
               </div>
               {andamentos.length === 0 ? (
-                <div>Nenhum andamento cadastrado.</div>
+                <div className="text-muted-foreground">Nenhum andamento cadastrado.</div>
               ) : (
                 <ul className="space-y-2">
                   {andamentos.map(a => (
-                    <li key={a.id} className="border p-2 rounded">
-                      <div><strong>Data:</strong> {a.data}</div>
+                    <li key={a.id} className="border p-2 rounded bg-white">
+                      <div><strong>Data:</strong> {a.data_final}</div>
+                      <div><strong>Título:</strong> {a.titulo}</div>
+                      <div><strong>Tipo:</strong> {a.tipo}</div>
                       <div><strong>Descrição:</strong> {a.descricao}</div>
                     </li>
                   ))}
                 </ul>
               )}
+              <AndamentoModal
+                open={showAndamentoModal}
+                onClose={() => setShowAndamentoModal(false)}
+                processoId={processoId}
+                onSave={async andamento => {
+                  // Salvar no Supabase
+                  await supabase.from('andamentos').insert([andamento]);
+                  setShowAndamentoModal(false);
+                  // Atualizar lista
+                  const { data } = await supabase.from('andamentos').select('*').eq('processo_id', processoId).order('data_final', { ascending: true });
+                  setAndamentos(data || []);
+                }}
+              />
             </div>
           )}
           {aba === 2 && (
@@ -127,32 +144,30 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
           )}
           {aba === 3 && (
             <div>
-              {/* Financeiro */}
-              <div className="flex gap-4 mb-4">
-                <div className="border p-2 rounded">
-                  <div>Total Receitas</div>
-                  <div className="font-bold text-green-600">R$ {receitas.reduce((acc, r) => acc + (r.valor || 0), 0).toFixed(2)}</div>
+              {/* Financeiro - Cards de Resumo */}
+              <h3 className="font-bold text-lg mb-6">Resumo Financeiro do Processo</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-green-100 rounded-lg p-6 flex flex-col items-center justify-center">
+                  <div className="text-lg font-semibold text-green-700 mb-2">Total Receitas</div>
+                  <div className="text-3xl font-bold text-green-700">R$ {receitas.reduce((acc, r) => acc + (r.valor || 0), 0).toFixed(2)}</div>
                 </div>
-                <div className="border p-2 rounded">
-                  <div>Total Gastos</div>
-                  <div className="font-bold text-red-600">R$ {gastos.reduce((acc, g) => acc + (g.valor || 0), 0).toFixed(2)}</div>
+                <div className="bg-red-100 rounded-lg p-6 flex flex-col items-center justify-center">
+                  <div className="text-lg font-semibold text-red-700 mb-2">Total Gastos</div>
+                  <div className="text-3xl font-bold text-red-700">R$ {gastos.reduce((acc, g) => acc + (g.valor || 0), 0).toFixed(2)}</div>
                 </div>
-                <div className="border p-2 rounded">
-                  <div>Resultado Líquido</div>
-                  <div className="font-bold">R$ {(receitas.reduce((acc, r) => acc + (r.valor || 0), 0) - gastos.reduce((acc, g) => acc + (g.valor || 0), 0)).toFixed(2)}</div>
+                <div className="bg-blue-100 rounded-lg p-6 flex flex-col items-center justify-center">
+                  <div className="text-lg font-semibold text-blue-700 mb-2">Resultado Líquido</div>
+                  <div className="text-3xl font-bold text-blue-700">R$ {(receitas.reduce((acc, r) => acc + (r.valor || 0), 0) - gastos.reduce((acc, g) => acc + (g.valor || 0), 0)).toFixed(2)}</div>
                 </div>
               </div>
-              <div className="flex gap-2 mb-2">
-                <Button>+ Adicionar Receita</Button>
-                <Button>+ Adicionar Gasto</Button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-bold mb-2">Receitas</h4>
-                  {receitas.length === 0 ? <div>Nenhuma receita cadastrada.</div> : (
+              {/* Seções verticais Receitas/Gastos */}
+              <div className="flex flex-col gap-6 mb-8">
+                <div className="w-full bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-bold mb-2">Receitas (Honorários, Acordos, etc)</h4>
+                  {receitas.length === 0 ? <div className="text-muted-foreground">Nenhuma receita registrada.</div> : (
                     <ul className="space-y-2">
                       {receitas.map(r => (
-                        <li key={r.id} className="border p-2 rounded">
+                        <li key={r.id} className="border p-2 rounded bg-white">
                           <div><strong>Descrição:</strong> {r.descricao}</div>
                           <div><strong>Valor:</strong> R$ {r.valor}</div>
                           <div><strong>Data:</strong> {r.data}</div>
@@ -161,12 +176,12 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
                     </ul>
                   )}
                 </div>
-                <div>
-                  <h4 className="font-bold mb-2">Gastos</h4>
-                  {gastos.length === 0 ? <div>Nenhum gasto cadastrado.</div> : (
+                <div className="w-full bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-bold mb-2">Gastos do Cliente no Processo</h4>
+                  {gastos.length === 0 ? <div className="text-muted-foreground">Nenhum gasto registrado.</div> : (
                     <ul className="space-y-2">
                       {gastos.map(g => (
-                        <li key={g.id} className="border p-2 rounded">
+                        <li key={g.id} className="border p-2 rounded bg-white">
                           <div><strong>Descrição:</strong> {g.descricao}</div>
                           <div><strong>Valor:</strong> R$ {g.valor}</div>
                           <div><strong>Data:</strong> {g.data}</div>
@@ -175,6 +190,11 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
                     </ul>
                   )}
                 </div>
+              </div>
+              {/* Botões de ação no final */}
+              <div className="flex gap-4 mt-2">
+                <Button>+ Adicionar Receita</Button>
+                <Button>+ Adicionar Gasto</Button>
               </div>
             </div>
           )}

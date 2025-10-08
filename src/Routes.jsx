@@ -17,6 +17,7 @@ import Audiencias from './pages/tasks/audiencias';
 import Prazos from './pages/tasks/prazos';
 import Reunioes from './pages/tasks/reunioes';
 import Publications from './pages/publications';
+import CalendarPage from './pages/calendar';
 import ClientPortal from './pages/client-portal';
 import LoginPage from './pages/login/LoginPage';
 import RegisterPage from './pages/login/Register';
@@ -107,6 +108,7 @@ const Routes = () => {
           <Route path="/financial-tracking" element={<RequireAuth><FinancialTracking /></RequireAuth>} />
           <Route path="/client-portal" element={<RequireAuth><ClientPortal /></RequireAuth>} />
           <Route path="/user-profile-settings" element={<RequireAuth><UserProfileSettings /></RequireAuth>} />
+          <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
           <Route path="/detetive" element={<RequireAuth><Detetive /></RequireAuth>} />
           <Route path="/monitoring" element={<RequireAuth><Monitoring /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

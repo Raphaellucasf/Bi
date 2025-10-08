@@ -3,6 +3,9 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
+import MaskedCurrencyInput from "../../../components/ui/MaskedCurrencyInput";
+import MaskedProcessNumberInput from "../../../components/ui/MaskedProcessNumberInput";
+import MaskedDateInput from "../../../components/ui/MaskedDateInput";
 import InputMask from "react-input-mask";
 import SimpleAutocomplete from "../../../components/ui/SimpleAutocomplete";
 import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
@@ -177,7 +180,15 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Tipo de Área</label>
                 <ShadcnSelect
-                  options={[] /* Adicione opções reais aqui */}
+                  options={[
+                    { value: "Trabalhista", label: "Trabalhista" },
+                    { value: "Cível", label: "Cível" },
+                    { value: "Criminal", label: "Criminal" },
+                    { value: "Previdenciário", label: "Previdenciário" },
+                    { value: "Tributário", label: "Tributário" },
+                    { value: "Família", label: "Família" },
+                    { value: "Outros", label: "Outros" }
+                  ]}
                   value={form.area}
                   onChange={v => setForm(f => ({ ...f, area: v }))}
                   placeholder="Selecione..."
@@ -185,7 +196,11 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               </div>
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Número do Processo</label>
-                <Input value={form.numero} onChange={e => setForm(f => ({ ...f, numero: e.target.value }))} />
+                <MaskedProcessNumberInput
+                  value={form.numero}
+                  onChange={e => setForm(f => ({ ...f, numero: e.target.value }))}
+                  placeholder="0000000-00.0000.0.00.0000"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
@@ -219,23 +234,37 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               </div>
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Valor da Causa (R$)</label>
-                <Input type="number" value={form.valor_causa} onChange={e => setForm(f => ({ ...f, valor_causa: e.target.value }))} />
+                <MaskedCurrencyInput
+                  value={form.valor_causa}
+                  onChange={e => setForm(f => ({ ...f, valor_causa: e.target.value }))}
+                  placeholder="R$ 0,00"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Honorários (R$)</label>
-                <Input type="number" value={form.honorarios} onChange={e => setForm(f => ({ ...f, honorarios: e.target.value }))} />
+                <MaskedCurrencyInput
+                  value={form.honorarios}
+                  onChange={e => setForm(f => ({ ...f, honorarios: e.target.value }))}
+                  placeholder="R$ 0,00"
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Data de Início</label>
-                <Input type="date" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} />
+                <MaskedDateInput
+                  value={form.data_inicio}
+                  onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Próxima Audiência</label>
-                <Input value={form.proxima_audiencia} onChange={e => setForm(f => ({ ...f, proxima_audiencia: e.target.value }))} />
+                <MaskedDateInput
+                  value={form.proxima_audiencia}
+                  onChange={e => setForm(f => ({ ...f, proxima_audiencia: e.target.value }))}
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Juiz(a)</label>
@@ -246,28 +275,7 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               <label className="font-semibold text-sm">Descrição do Caso</label>
               <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} multiline />
             </div>
-            <div className="mb-2">
-              <label className="font-semibold text-sm">Empresas associadas</label>
-              <ShadcnSelect
-                options={empresas.filter(e => !form.empresas.some(sel => sel.id === e.id)).map(e => ({ value: e.id, label: e.nome_fantasia }))}
-                value={null}
-                onChange={id => {
-                  const empresa = empresas.find(e => e.id === id);
-                  if (empresa && !form.empresas.some(e => e.id === empresa.id)) {
-                    setForm(f => ({ ...f, empresas: [...f.empresas, empresa] }));
-                  }
-                }}
-                placeholder="Adicionar empresa..."
-              />
-              <div className="flex flex-wrap gap-2 mt-2">
-                {form.empresas.map(e => (
-                  <span key={e.id} className="px-2 py-1 bg-blue-100 rounded text-blue-800 text-xs flex items-center gap-1">
-                    {e.nome_fantasia}
-                    <button type="button" className="ml-1 text-red-500" onClick={() => setForm(f => ({ ...f, empresas: f.empresas.filter(sel => sel.id !== e.id) }))}>×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
+            {/* Campo 'Empresas associadas' removido conforme solicitado */}
             {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
             <div className="flex justify-end mt-8">
               <Button type="button" className="mr-2" variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -350,7 +358,13 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Telefone</label>
-                <Input value={parteForm.telefone} onChange={e => setParteForm(f => ({ ...f, telefone: e.target.value }))} />
+                <InputMask
+                  mask="(99) 99999-9999"
+                  value={parteForm.telefone}
+                  onChange={e => setParteForm(f => ({ ...f, telefone: e.target.value }))}
+                  placeholder="(DDD) 00000-0000"
+                  className="input input-bordered w-full"
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Email</label>

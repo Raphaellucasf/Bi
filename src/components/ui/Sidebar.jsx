@@ -23,6 +23,7 @@ const Sidebar = ({ isCollapsed = false, onToggle }) => {
         { label: 'Audiências', path: '/tasks/audiencias', icon: 'Calendar', tooltip: 'Audiências' },
         { label: 'Prazos', path: '/tasks/prazos', icon: 'Clock', tooltip: 'Prazos' },
         { label: 'Reuniões', path: '/tasks/reunioes', icon: 'Users', tooltip: 'Reuniões' },
+        { label: 'Calendário', path: '/calendar', icon: 'CalendarDays', tooltip: 'Calendário de tarefas' },
       ]
     },
     {
