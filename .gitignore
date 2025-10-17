@@ -1,0 +1,18 @@
+.DS_Store
+node_modules
+.idea
+package-lock.json
+/build
+.vscode/
+.idea/
+vite.config.*s.*
+
+# Ignore environment files
+.env
+.env.*
+!.env.example
+
+# Ignore temp/edit artifacts
+temp/
+*.temp
+*.new

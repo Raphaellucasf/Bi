@@ -1,0 +1,161 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../../../services/supabaseClient';
+import Button from '../../../../components/ui/Button';
+import Input from '../../../../components/ui/Input';
+import Icon from '../../../../components/AppIcon';
+import MaskedCurrencyInput from '../../../../components/ui/MaskedCurrencyInput';
+import MaskedDateInput from '../../../../components/ui/MaskedDateInput';
+import Select from '../../../../components/ui/Select';
+
+const Etapa1DadosGerais = ({ 
+  faturamentoData, 
+  setFaturamentoData, 
+  onAvancar, 
+  isValida 
+}) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [processos, setProcessos] = useState([]);
+  const [processoSearch, setProcessoSearch] = useState('');
+
+  const fetchProcessos = async (search = '') => {
+    // Busca processos e clientes (join)
+    let query = supabase.from('processos').select('id, numero_processo, clientes:cliente_id(nome_completo)');
+    if (search) {
+      query = query.ilike('numero_processo', `%${search}%`).or(`clientes.nome_completo.ilike.%${search}%`);
+    }
+    const { data } = await query;
+    setProcessos(data || []);
+  };
+
+  // Busca inicial de processos
+  useEffect(() => {
+    fetchProcessos();
+  }, []);
+
+  // Busca dinâmica: dispara fetchProcessos ao digitar no Select
+  const handleProcessoSearch = val => {
+    setProcessoSearch(val);
+    fetchProcessos(val);
+  };
+
+  const handleInputChange = (field, value) => {
+    const stringValue = value?.toString() || '';
+    setFaturamentoData(prev => ({
+      ...prev,
+      [field]: stringValue
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-gray-200 pb-4">
+        <h3 className="text-lg font-semibold text-gray-900">
+          Dados Gerais do Faturamento
+        </h3>
+        <p className="text-sm text-gray-600 mt-1">
+          Passo 1 de 2: Defina as informações básicas do acordo
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Processo Associado *
+        </label>
+        <Select
+          name="processo_id"
+          value={faturamentoData.processo_id}
+          onChange={val => handleInputChange('processo_id', val)}
+          options={processos.map(p => ({ 
+            value: p.id, 
+            label: `${p.numero_processo} (Cliente: ${p.clientes?.nome_completo || '-'})` 
+          }))}
+          placeholder="Buscar por número ou nome do cliente"
+          onSearch={handleProcessoSearch}
+          searchable={true}
+          clearable={true}
+          loading={loading}
+          className="w-full"
+        />
+        {!faturamentoData.processo_id && (
+          <p className="text-xs text-red-600 mt-1">Campo obrigatório</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Descrição do Serviço *
+        </label>
+        <Input
+          value={faturamentoData.descricao}
+          onChange={(e) => handleInputChange('descricao', e.target.value)}
+          placeholder="Ex: Honorários advocatícios, consultoria jurídica..."
+          className="w-full"
+        />
+        {!faturamentoData.descricao && (
+          <p className="text-xs text-red-600 mt-1">Campo obrigatório</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Valor Total do Acordo *
+        </label>
+        <MaskedCurrencyInput
+          value={faturamentoData.valor_total?.toString() || ''}
+          onChange={(e) => handleInputChange('valor_total', e.target.value)}
+          className="w-full"
+          placeholder="R$ 0,00"
+        />
+        {(!faturamentoData.valor_total || parseFloat(faturamentoData.valor_total || '0') <= 0) && (
+          <p className="text-xs text-red-600 mt-1">
+            Informe um valor maior que zero
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Data do Acordo *
+        </label>
+        <MaskedDateInput
+          value={faturamentoData.data_acordo?.toString() || ''}
+          onChange={(e) => handleInputChange('data_acordo', e.target.value)}
+          className="w-full"
+          placeholder="DD/MM/AAAA"
+        />
+        {!faturamentoData.data_acordo && (
+          <p className="text-xs text-red-600 mt-1">Campo obrigatório</p>
+        )}
+      </div>
+
+      {isValida() && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon name="Info" size={16} className="text-blue-600" />
+            <span className="text-sm font-medium text-blue-900">
+              Resumo dos Dados
+            </span>
+          </div>
+          <div className="text-sm text-blue-700 space-y-1">
+            <p><strong>Valor Total:</strong> R$ {parseFloat(faturamentoData.valor_total || '0').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p><strong>Data:</strong> {new Date(faturamentoData.data_acordo).toLocaleDateString('pt-BR')}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end pt-4">
+        <Button
+          onClick={onAvancar}
+          disabled={!isValida()}
+          className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <Icon name="ArrowRight" size={16} className="mr-2" />
+          Avançar para Parcelas
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default Etapa1DadosGerais;
