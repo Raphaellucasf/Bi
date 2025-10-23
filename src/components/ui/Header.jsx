@@ -6,12 +6,6 @@ import NotificationBell from './NotificationBell';
 import Button from './Button';
 
 const Header = ({ sidebarCollapsed = false }) => {
-  // Notification system states
-  const [notifications, setNotifications] = useState([]);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const notificationsRef = useRef(null);
-  // Calculate unread notifications count
-  const unreadCount = notifications.filter(n => !n.read).length;
   const [userId, setUserId] = useState(null);
   useEffect(() => {
     async function fetchUserId() {
@@ -126,9 +120,6 @@ const Header = ({ sidebarCollapsed = false }) => {
       if (userMenuRef?.current && !userMenuRef?.current?.contains(event?.target)) {
         setUserMenuOpen(false);
       }
-      if (notificationsRef?.current && !notificationsRef?.current?.contains(event?.target)) {
-        setNotificationsOpen(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -137,17 +128,6 @@ const Header = ({ sidebarCollapsed = false }) => {
 
   const handleUserMenuToggle = () => {
     setUserMenuOpen(!userMenuOpen);
-    setNotificationsOpen(false);
-  };
-
-  const handleNotificationsToggle = () => {
-    const willOpen = !notificationsOpen;
-    setNotificationsOpen(willOpen);
-    setUserMenuOpen(false);
-    // Se for abrir, marcar todas como lidas
-    if (!notificationsOpen) {
-      setNotifications((prev) => prev.map(n => ({ ...n, read: true })));
-    }
   };
 
   const handleLogout = async () => {
@@ -178,76 +158,6 @@ const Header = ({ sidebarCollapsed = false }) => {
           <div className="flex items-center space-x-4">
             {getPageActions()}
             <NotificationBell userId={userId} />
-            
-            {/* Notifications */}
-            <div className="relative" ref={notificationsRef}>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative"
-                onClick={handleNotificationsToggle}
-              >
-                <Icon name="Bell" size={20} />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-error text-error-foreground text-xs rounded-full flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-
-              {/* Notifications Dropdown */}
-              {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-popover border border-border rounded-md shadow-lg z-200">
-                  <div className="py-2">
-                    <div className="px-4 py-2 border-b border-border">
-                      <h3 className="text-sm font-medium text-popover-foreground">
-                        Notificações
-                      </h3>
-                    </div>
-                    
-                    <div className="max-h-64 overflow-y-auto">
-                      {notifications?.map((notification) => (
-                        <div
-                          key={notification?.id}
-                          className={`px-4 py-3 hover:bg-muted cursor-pointer border-l-4 ${
-                            notification?.read 
-                              ? 'border-l-transparent' :'border-l-primary bg-muted/30'
-                          }`}
-                        >
-                          <div className="flex items-start space-x-3">
-                            <Icon 
-                              name={
-                                notification?.type === 'deadline' ? 'Clock' :
-                                notification?.type === 'update' ? 'FileSearch' : 'CheckSquare'
-                              }
-                              size={16}
-                              className="text-muted-foreground mt-1"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-popover-foreground">
-                                {notification?.title}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {notification?.message}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {notification?.time}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div className="px-4 py-2 border-t border-border">
-                      <button className="text-xs text-primary hover:underline">
-                        Ver todas as notificações
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* User Menu */}
             <div className="relative" ref={userMenuRef}>
