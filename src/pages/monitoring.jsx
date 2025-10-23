@@ -2,12 +2,9 @@ import Button from "../components/ui/Button";
 import Header from "../components/ui/Header";
 
 
-import { createClient } from '@supabase/supabase-js';
 import Sidebar from "../components/ui/Sidebar";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '../services/supabaseClient';
 import React, { useEffect, useState } from "react";
 
 const Monitoring = () => {

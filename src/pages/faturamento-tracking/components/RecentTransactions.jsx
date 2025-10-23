@@ -15,7 +15,6 @@ const RecentTransactions = ({ refreshKey }) => {
     try {
       setIsLoading(true);
 
-      console.log('💰 Buscando receitas...');
       
       // A tabela receitas pode não existir; se falhar, buscar parcelas pagas como receitas
       let receitasData = [];
@@ -29,10 +28,8 @@ const RecentTransactions = ({ refreshKey }) => {
         if (!receitasError && data) {
           receitasData = data;
         } else {
-          console.warn('⚠️ Tabela receitas ausente; usando parcelas pagas como fallback. Motivo:', receitasError);
         }
       } catch (err) {
-        console.warn('⚠️ Erro ao buscar receitas; usando fallback:', err);
       }
 
       if (!receitasData || receitasData.length === 0) {
@@ -54,14 +51,11 @@ const RecentTransactions = ({ refreshKey }) => {
             }));
           }
         } catch (err) {
-          console.warn('⚠️ Erro ao buscar parcelas pagas para receitas:', err);
         }
       }
 
-      console.log('💰 Receitas (final):', receitasData);
 
       // Buscar gastos recentes (últimos 5)
-      console.log('💸 Buscando gastos...');
       let gastosData = [];
       try {
         const { data, error: gastosError } = await supabase
@@ -71,21 +65,16 @@ const RecentTransactions = ({ refreshKey }) => {
           .limit(5);
 
         if (gastosError) {
-          console.warn('⚠️ Tabela gastos não encontrada ou erro:', gastosError);
         } else {
           gastosData = data || [];
         }
       } catch (err) {
-        console.warn('⚠️ Erro ao buscar gastos:', err);
       }
 
-      console.log('💸 Gastos retornados do banco:', gastosData);
-      console.log('💸 Total de gastos:', gastosData?.length);
 
       setReceitas(receitasData);
       setGastos(gastosData);
     } catch (error) {
-      console.error('Erro ao buscar transações recentes:', error);
     } finally {
       setIsLoading(false);
     }

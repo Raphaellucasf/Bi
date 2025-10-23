@@ -98,11 +98,19 @@ const FaturamentoWizardModal = ({ isOpen, onClose, onSuccess }) => {
       // Preparar dados das parcelas
       let parcelasPayload = [];
       
+      console.log('🔍 Modo de parcelas:', wizard.parcelasData.modo);
+      console.log('🔍 Parcelas personalizadas:', wizard.parcelasData.parcelas_personalizadas);
+      console.log('🔍 Parcelas geradas (iguais):', wizard.parcelasGeradas);
+      
       if (wizard.parcelasData.modo === 'iguais') {
         parcelasPayload = wizard.parcelasGeradas.map((parcela, index) => {
-          const valor = typeof parcela.valor === 'string' 
-            ? parseFloat(parcela.valor.replace(/[^\d.,]/g, '').replace(',', '.'))
-            : parcela.valor;
+          // Converter valor corretamente (remover formatação brasileira)
+          let valorStr = parcela.valor?.toString() || '0';
+          valorStr = valorStr
+            .replace(/[R$\s]/g, '')  // Remove R$ e espaços
+            .replace(/\./g, '')       // Remove pontos (separador de milhar)
+            .replace(',', '.');       // Substitui vírgula por ponto (decimal)
+          const valor = parseFloat(valorStr) || 0;
 
           // Converter e validar data de vencimento
           let dataVencimento;
@@ -127,20 +135,29 @@ const FaturamentoWizardModal = ({ isOpen, onClose, onSuccess }) => {
         });
       } else {
         parcelasPayload = wizard.parcelasData.parcelas_personalizadas.map((parcela, index) => {
-          const valor = typeof parcela.valor === 'string'
-            ? parseFloat(parcela.valor.replace(/[^\d.,]/g, '').replace(',', '.'))
-            : parcela.valor;
+          // O valor já vem como número puro do MaskedCurrencyInput (ex: "50000")
+          let valorStr = parcela.valor?.toString() || '0';
+          console.log(`💰 Parcela ${index + 1} - Valor original:`, parcela.valor);
+          console.log(`💰 Parcela ${index + 1} - Valor como string:`, valorStr);
+          
+          // Se vier com formatação, limpa; se vier puro, apenas converte
+          valorStr = valorStr
+            .replace(/[R$\s]/g, '')  // Remove R$ e espaços
+            .replace(/\./g, '')       // Remove pontos (separador de milhar)
+            .replace(',', '.');       // Substitui vírgula por ponto (decimal)
+          
+          const valor = parseFloat(valorStr) || 0;
+          console.log(`💰 Parcela ${index + 1} - Valor limpo:`, valorStr);
+          console.log(`💰 Parcela ${index + 1} - Valor final convertido:`, valor);
 
           // Converter e validar data de vencimento
           let dataVencimento;
           try {
-            console.log(`🔍 Processando data da parcela personalizada ${index + 1}:`, parcela.data_vencimento);
             dataVencimento = formatDate(parcela.data_vencimento);
             if (!dataVencimento) {
               throw new Error(`Data de vencimento inválida na parcela personalizada ${index + 1}`);
             }
           } catch (error) {
-            console.error(`❌ Erro ao processar data da parcela personalizada ${index + 1}:`, error);
             throw new Error(`Erro na data de vencimento da parcela personalizada ${index + 1}: ${error.message}`);
           }
 
@@ -164,29 +181,17 @@ const FaturamentoWizardModal = ({ isOpen, onClose, onSuccess }) => {
         throw new Error(`Soma das parcelas (${totalParcelas}) difere do valor total (${valorTotal})`);
       }
 
-      // Tentar salvar manualmente
-      console.log('💾 Iniciando salvamento...');
-      try {
-        const resultado = await criarFaturamentoManual(faturamentoPayload, parcelasPayload);
-        console.log('✅ Faturamento salvo com sucesso:', resultado);
-        
-        // Resetar o wizard
-        wizard.resetWizard();
-        
-        // Notificar sucesso e fechar modal
-        alert('Faturamento criado com sucesso!');
-        
-        // Importante: chamar onSuccess antes de fechar o modal
-        onSuccess?.();
-        onClose();
-        
-        return resultado;
-      } catch (error) {
-        console.error('❌ Erro ao salvar:', error);
-        throw error;
-      }
+      // Tentar salvar primeiro manualmente, sem RPC
+      console.log('💾 Iniciando salvamento manual...');
+      const resultado = await criarFaturamentoManual(faturamentoPayload, parcelasPayload);
+      console.log('✅ Faturamento salvo com sucesso:', resultado);
       
-      // Notificação de sucesso (você pode usar uma biblioteca como react-hot-toast)
+      // Sucesso - resetar wizard e fechar
+      wizard.resetWizard();
+      onSuccess?.();
+      onClose();
+      
+      // Notificação de sucesso
       alert('Faturamento criado com sucesso!');
 
     } catch (error) {

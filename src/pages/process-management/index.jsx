@@ -4,6 +4,7 @@ import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import { supabase } from '../../services/supabaseClient';
+import { formatProperName } from '../../utils/formatters';
 
 const getEscritorioId = async () => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -66,6 +67,7 @@ const ProcessManagement = () => {
 				.from('processos')
 				.select(`*, processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))`)
 				.eq('escritorio_id', eid)
+				.order('updated_at', { ascending: false })
 				.order('created_at', { ascending: false })
 				.limit(3);
 			if (!ignore) setProcesses(processos || []);
@@ -155,7 +157,8 @@ const ProcessManagement = () => {
 			.select(`*, processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))`)
 			.eq('escritorio_id', eid);
 		if (onlyRecent) {
-			query = query.order('created_at', { ascending: false }).limit(3);
+			query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
+			// Removido o .limit(3) para garantir que todas as partes contrárias apareçam
 		}
 		const { data: processos } = await query;
 		setProcesses(processos || []);
@@ -193,40 +196,92 @@ const ProcessManagement = () => {
 			setModalLoading(false);
 			return;
 		}
-		// Mapeia dados do processo
+		// Função para converter dd/mm/yyyy para yyyy-mm-dd
+		function toYMD(dateStr) {
+			if (!dateStr) return null;
+			if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+			const parts = dateStr.split('/');
+			if (parts.length === 3) {
+				return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+			}
+			return dateStr;
+		}
+		// Mapeia dados do processo (usando EXATAMENTE os nomes do schema do banco)
 		const mapped = {
-			titulo: data.titulo,
-			cliente_id: clienteId,
-			area_direito: data.area,
-			numero_processo: data.numero,
-			tribunal: data.tribunal,
-			prioridade: data.media || data.prioridade,
-			status: data.situacao || data.status,
-			valor_causa: data.valor_causa || data.valor,
-			honorarios: data.honorarios,
-			data_inicio: data.data_inicio || data.dataInicio,
-			proxima_audiencia: data.proxima_audiencia || data.proximaAudiencia,
-			juiz: data.juiz,
-			descricao: data.descricao,
-			patrono_id: data.patrono || data.escritorio || null,
-			escritorio_id: escritorioId,
+			numero_processo: data.numero || '', // OBRIGATÓRIO
+			cliente_id: clienteId, // OBRIGATÓRIO
+			escritorio_id: escritorioId, // OBRIGATÓRIO
+			titulo: data.titulo || null,
+			area_direito: data.area || null,
+			tribunal: data.tribunal || null,
+			prioridade: data.media || data.prioridade || null,
+			status: (data.situacao && typeof data.situacao === 'string' && data.situacao.trim() !== '' ? data.situacao : (data.status && typeof data.status === 'string' && data.status.trim() !== '' ? data.status : 'Ativo')),
+			valor_causa: data.valor_causa ? Number(data.valor_causa) : (data.valor ? Number(data.valor) : null),
+			honorarios: data.honorarios || null,
+			data_inicio: toYMD(data.data_inicio || data.dataInicio) || null,
+			proxima_audiencia: toYMD(data.proxima_audiencia || data.proximaAudiencia) || null,
+			juiz: data.juiz || null,
+			descricao: data.descricao || null,
+			competencia_vara: data.competencia || null,
+			ativo: 'Ativo'
+			// NÃO inicializa patrono_id aqui - será adicionado apenas se válido
 		};
+		
+		console.log('DEBUG data.patrono recebido:', data.patrono, 'tipo:', typeof data.patrono);
+		
+		// Só adiciona patrono_id se tiver valor válido e verificar se existe no banco
+		if (data.patrono && typeof data.patrono === 'string' && data.patrono.trim() !== '' && /^[0-9a-fA-F-]{36}$/.test(data.patrono.trim())) {
+			const patronoId = data.patrono.trim();
+			console.log('DEBUG verificando patrono:', patronoId);
+			// Verifica se o patrono existe no banco antes de adicionar
+			const { data: patronoExists, error: patronoError } = await supabase.from('patrono').select('id').eq('id', patronoId).single();
+			console.log('DEBUG patronoExists:', patronoExists, 'error:', patronoError);
+			if (patronoExists && !patronoError) {
+				mapped.patrono_id = patronoId;
+				console.log('DEBUG patrono_id adicionado ao mapped');
+			} else {
+				console.log('DEBUG patrono NÃO existe ou deu erro, NÃO será adicionado');
+			}
+		} else {
+			console.log('DEBUG patrono vazio ou inválido, NÃO será adicionado');
+		}
+		
+		// Garante que todos os campos opcionais estejam presentes como null se undefined
+		Object.keys(mapped).forEach(key => {
+			if (mapped[key] === undefined) mapped[key] = null;
+		});
+		
+		// REMOVE o campo patrono_id se for null (para não violar FK)
+		if (!mapped.patrono_id || mapped.patrono_id === null) {
+			delete mapped.patrono_id;
+		}
+		
+		console.log('DEBUG mapped FINAL para insert:', mapped);
+		console.log('DEBUG mapped tem patrono_id?', 'patrono_id' in mapped, mapped.patrono_id);
 		// Insere processo
 		const result = await supabase.from('processos').insert([mapped]).select();
+		console.log('DEBUG insert result:', result);
+		console.log('DEBUG insert error detalhado:', JSON.stringify(result.error, null, 2));
 		if (result.error || !result.data || !result.data[0]) {
-			alert('Erro ao salvar processo: ' + (result.error?.message || result.error?.description || result.error));
+			console.error('ERRO COMPLETO:', result.error);
+			alert('Erro ao salvar processo: ' + (result.error?.message || result.error?.details || result.error?.hint || JSON.stringify(result.error)));
 			setModalLoading(false);
 			return;
 		}
 		const processoId = result.data[0].id;
+		console.log('DEBUG Processo criado com ID:', processoId);
+		
 		// Vincula empresas (partes contrárias)
 		const empresas = Array.isArray(data.partesContrarias) ? data.partesContrarias : [];
+		console.log('DEBUG CREATE partesContrarias recebidas:', empresas.length, 'empresas');
+		
 		for (const empresa of empresas) {
 			// Verifica se empresa já existe pelo CNPJ
 			let empresaId;
 			const { data: empresasExistentes } = await supabase.from('empresas').select('id').eq('cnpj', empresa.cnpj).limit(1);
 			if (empresasExistentes && empresasExistentes.length > 0) {
 				empresaId = empresasExistentes[0].id;
+				console.log('DEBUG empresa já existe, usando empresaId:', empresaId);
 			} else {
 				// Insere empresa
 				const { data: empresaInsert, error: empresaError } = await supabase.from('empresas').insert([
@@ -244,23 +299,33 @@ const ProcessManagement = () => {
 					}
 				]).select();
 				if (empresaError || !empresaInsert || !empresaInsert[0]) {
+					console.error('ERRO ao salvar empresa:', empresaError);
 					alert('Erro ao salvar empresa: ' + (empresaError?.message || empresaError?.description || empresaError));
 					continue;
 				}
 				empresaId = empresaInsert[0].id;
+				console.log('DEBUG empresa criada, empresaId:', empresaId);
 			}
-			// Insere vínculo na tabela de junção
-			await supabase.from('processos_empresas').insert([
-				{
-					processo_id: processoId,
-					empresa_id: empresaId
+			// Insere vínculo na tabela de junção, garantindo que o processoId está correto
+			if (processoId && empresaId) {
+				const linkRes = await supabase.from('processos_empresas').insert([
+					{
+						processo_id: processoId,
+						empresa_id: empresaId
+					}
+				]).select();
+				console.log('DEBUG link processo-empresa:', linkRes);
+				if (linkRes.error) {
+					console.error('ERRO ao vincular empresa ao processo:', linkRes.error);
+				} else {
+					console.log('DEBUG Vínculo criado com sucesso:', { processo_id: processoId, empresa_id: empresaId });
 				}
-			]);
+			}
 		}
 		setModalLoading(false);
 		setShowModal(false);
 		// After create, reload only 3 most recent
-		reloadProcesses(escritorioId, true);
+		await reloadProcesses(escritorioId, true);
 	};
 
 	const handleEditProcess = (proc) => {
@@ -272,27 +337,146 @@ const ProcessManagement = () => {
 		setModalLoading(true);
 		if (!editingProcess?.id) return;
 		const mapped = {
-			titulo: data.titulo,
-			cliente_id: data.cliente, // deve ser o id do cliente
-			area_direito: data.area,
-			numero_processo: data.numero,
-			tribunal_vara: data.tribunal,
-			prioridade: data.prioridade,
-			status: data.status,
-			valor_causa: data.valor,
-			honorarios: data.honorarios,
-			data_inicio: data.dataInicio,
-		proxima_audiencia: data.proximaAudiencia,
-			juiz: data.juiz,
-			descricao: data.descricao,
-			patrono_id: data.escritorio || null,
+			numero_processo: data.numero || '', // OBRIGATÓRIO
+			cliente_id: data.cliente, // OBRIGATÓRIO
+			escritorio_id: escritorioId, // OBRIGATÓRIO
+			titulo: data.titulo || null,
+			area_direito: data.area || null,
+			tribunal: data.tribunal || null,
+			prioridade: data.prioridade || null,
+			status: data.status || data.situacao || 'Ativo',
+			valor_causa: data.valor ? Number(data.valor) : null,
+			honorarios: data.honorarios || null,
+			data_inicio: data.dataInicio || null,
+			proxima_audiencia: data.proximaAudiencia || null,
+			juiz: data.juiz || null,
+			descricao: data.descricao || null,
+			competencia_vara: data.competencia || null,
 		};
-			await supabase.from('processos').update(mapped).eq('id', editingProcess.id);
+		
+		console.log('DEBUG EDIT data.patrono recebido:', data.patrono, 'tipo:', typeof data.patrono);
+
+		// Vincula empresas (partes contrárias) - sempre processa, mesmo que vazia
+		console.log('DEBUG EDIT partesContrarias recebidas:', data.partesContrarias);
+		
+		// Remove vínculos existentes primeiro (sempre)
+		const { error: deleteError } = await supabase
+			.from('processos_empresas')
+			.delete()
+			.eq('processo_id', editingProcess.id);
+		
+		if (deleteError) {
+			console.error('ERRO ao remover vínculos existentes:', deleteError);
+		} else {
+			console.log('DEBUG Vínculos antigos removidos com sucesso');
+		}
+
+		// Adiciona novos vínculos se houver empresas
+		if (Array.isArray(data.partesContrarias) && data.partesContrarias.length > 0) {
+			console.log('DEBUG Adicionando', data.partesContrarias.length, 'novas empresas');
+			for (const empresa of data.partesContrarias) {
+				let empresaId;
+				const { data: empresasExistentes } = await supabase
+					.from('empresas')
+					.select('id')
+					.eq('cnpj', empresa.cnpj)
+					.limit(1);
+
+				if (empresasExistentes && empresasExistentes.length > 0) {
+					empresaId = empresasExistentes[0].id;
+				} else {
+					// Insere nova empresa
+							 console.log('DEBUG Inserting new empresa:', empresa);
+							 const { data: novaEmpresa, error: insertError } = await supabase
+								 .from('empresas')
+								 .insert([{
+									 cnpj: empresa.cnpj,
+									 razao_social: empresa.razaoSocial,
+									 nome_fantasia: empresa.nomeFantasia,
+									 endereco_rfb: empresa.enderecoRfb,
+									 endereco_trabalho: empresa.enderecoTrabalho,
+									 advogado: empresa.advogado,
+									 oab: empresa.oab,
+									 telefone: empresa.telefone,
+									 email: empresa.email,
+									 observacoes: empresa.observacoes
+								 }])
+						.select('id')
+						.limit(1);
+
+					if (insertError) {
+						console.error('ERRO ao inserir empresa:', insertError);
+						continue;
+					}
+					empresaId = novaEmpresa[0].id;
+				}
+
+				// Vincula empresa ao processo
+					 console.log('DEBUG Linking empresa:', empresaId, 'to processo:', editingProcess.id);
+				const { error: linkError } = await supabase
+					.from('processos_empresas')
+					.insert([{
+						processo_id: editingProcess.id,
+						empresa_id: empresaId
+					}]);
+
+				if (linkError) {
+					console.error('ERRO ao vincular empresa ao processo:', linkError);
+						 console.error('Details:', { processo_id: editingProcess.id, empresa_id: empresaId });
+				} else {
+					console.log('DEBUG Vínculo criado com sucesso:', { processo_id: editingProcess.id, empresa_id: empresaId });
+				}
+			}
+		} else {
+			console.log('DEBUG Nenhuma empresa para adicionar (partesContrarias vazio ou undefined)');
+		}
+		
+		// Só adiciona patrono_id se for um UUID válido e verificar se existe no banco
+		if (data.patrono && typeof data.patrono === 'string' && data.patrono.trim() !== '' && /^[0-9a-fA-F-]{36}$/.test(data.patrono.trim())) {
+			const patronoId = data.patrono.trim();
+			console.log('DEBUG EDIT verificando patrono:', patronoId);
+			const { data: patronoExists, error: patronoError } = await supabase.from('patrono').select('id').eq('id', patronoId).single();
+			console.log('DEBUG EDIT patronoExists:', patronoExists, 'error:', patronoError);
+			if (patronoExists && !patronoError) {
+				mapped.patrono_id = patronoId;
+				console.log('DEBUG EDIT patrono_id adicionado ao mapped');
+			} else {
+				console.log('DEBUG EDIT patrono NÃO existe ou deu erro, NÃO será adicionado');
+			}
+		} else {
+			console.log('DEBUG EDIT patrono vazio ou inválido, NÃO será adicionado');
+		}
+		
+		Object.keys(mapped).forEach(key => {
+			if (mapped[key] === undefined) mapped[key] = null;
+		});
+		
+		// REMOVE o campo patrono_id se for null (para não violar FK)
+		if (!mapped.patrono_id || mapped.patrono_id === null) {
+			delete mapped.patrono_id;
+		}
+		
+		console.log('DEBUG update mapped:', mapped);
+		const result = await supabase.from('processos').update(mapped).eq('id', editingProcess.id).select();
+		console.log('DEBUG update result:', result);
+		if (result.error) {
+			console.error('Erro ao atualizar processo:', result.error);
+			alert('Erro ao atualizar processo: ' + result.error.message);
+			setModalLoading(false);
+			return;
+		}
+		
+		if (!result.data || result.data.length === 0) {
+			console.error('Processo atualizado mas nenhum dado retornado (possível problema de RLS)');
+			alert('Processo atualizado mas não foi possível confirmar. Verifique as permissões.');
+		} else {
+			console.log('DEBUG Processo atualizado com sucesso:', result.data[0]);
+		}
+		
 		setModalLoading(false);
 		setShowEditModal(false);
 		setEditingProcess(null);
-		// After edit, reload only 3 most recent
-		reloadProcesses(escritorioId, true);
+		await reloadProcesses(escritorioId, true);
 	};
 
 	const handleDeleteProcess = async (proc) => {
@@ -303,7 +487,7 @@ const ProcessManagement = () => {
 		setDeleteLoading(false);
 		setDeletingId(null);
 		// After delete, reload only 3 most recent
-		reloadProcesses(escritorioId, true);
+		await reloadProcesses(escritorioId, true);
 	};
 
 	const handleAddComment = (proc) => {
@@ -374,9 +558,9 @@ const ProcessManagement = () => {
 								<div key={proc.id} className="flex flex-col gap-2">
 									<div className="flex items-center justify-between">
 										<div>
-											<div className="text-lg font-semibold text-foreground">{proc.titulo}</div>
+											<div className="text-lg font-semibold text-foreground">{formatProperName(proc.titulo)}</div>
 											<div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-												<span className="flex items-center gap-1"><Icon name="User" size={16} /> {clientNames[proc.cliente_id] || <span className="italic text-gray-400">Cliente não encontrado</span>}</span>
+												<span className="flex items-center gap-1"><Icon name="User" size={16} /> {clientNames[proc.cliente_id] ? formatProperName(clientNames[proc.cliente_id]) : <span className="italic text-gray-400">Cliente não encontrado</span>}</span>
 												<span className="flex items-center gap-1"><Icon name="UserCheck" size={16} /> {
 													proc.patrono_id ?
 														(patronoNames[proc.patrono_id] || <span className="italic text-gray-400">Patrono não encontrado</span>) :
@@ -409,7 +593,7 @@ const ProcessManagement = () => {
 																pe.empresa ? (
 																	<span key={idx} className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
 																		<Icon name="Building" size={13} />
-																		{pe.empresa.razao_social || pe.empresa.nome_fantasia || pe.empresa.cnpj}
+																		{formatProperName(pe.empresa.razao_social || pe.empresa.nome_fantasia || pe.empresa.cnpj)}
 																	</span>
 																) : null
 															))}

@@ -8,6 +8,7 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
   const [showAndamentoModal, setShowAndamentoModal] = useState(false);
   const [aba, setAba] = useState(0);
   const [processo, setProcesso] = useState(null);
+  const [cliente, setCliente] = useState(null);
   const [andamentos, setAndamentos] = useState([]);
   const [partesContrarias, setPartesContrarias] = useState([]);
   const [receitas, setReceitas] = useState([]);
@@ -16,13 +17,44 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
 
   useEffect(() => {
     if (!processoId || !open) return;
-    // Detalhes + cliente
+    // Detalhes do processo
     supabase
       .from('processos')
-      .select('*, clientes(*)')
+      .select('*')
       .eq('id', processoId)
       .single()
-      .then(({ data }) => setProcesso(data));
+      .then(async ({ data, error }) => {
+        if (error) {
+          console.error('DEBUG [ProcessoDetalhes] erro ao buscar processo:', error);
+          return;
+        }
+        console.log('DEBUG [ProcessoDetalhes] processo:', data);
+        setProcesso(data);
+        // Buscar cliente separadamente
+        if (data?.cliente_id) {
+          console.log('DEBUG [ProcessoDetalhes] buscando cliente com id:', data.cliente_id);
+          try {
+            const { data: clienteData, error: clienteError } = await supabase
+              .from('clientes')
+              .select('*')
+              .eq('id', data.cliente_id)
+              .single();
+            console.log('DEBUG [ProcessoDetalhes] cliente encontrado:', clienteData, 'erro:', clienteError);
+            if (clienteError) {
+              console.error('DEBUG [ProcessoDetalhes] erro ao buscar cliente:', clienteError);
+            }
+            setCliente(clienteData);
+          } catch (err) {
+            console.error('DEBUG [ProcessoDetalhes] exceção ao buscar cliente:', err);
+            setCliente(null);
+          }
+        } else {
+          console.log('DEBUG [ProcessoDetalhes] processo sem cliente_id');
+        }
+      })
+      .catch(err => {
+        console.error('DEBUG [ProcessoDetalhes] exceção ao buscar processo:', err);
+      });
     // Andamentos
     supabase.from('andamentos').select('*').eq('processo_id', processoId).order('data', { ascending: false }).then(({ data }) => setAndamentos(data || []));
     // Faturamento
@@ -76,8 +108,8 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gray-50 rounded p-4">
                       <div className="font-bold mb-2 flex items-center gap-2">👤 Informações do Cliente</div>
-                      <div><span className="font-semibold">Nome:</span> {processo.clientes?.nome_completo || processo.clientes?.nome || '-'}</div>
-                      <div><span className="font-semibold">CPF/CNPJ:</span> {processo.clientes?.cpf_cnpj || '-'}</div>
+                      <div><span className="font-semibold">Nome:</span> {cliente?.nome_completo || cliente?.nome || 'Cliente não encontrado'}</div>
+                      <div><span className="font-semibold">CPF/CNPJ:</span> {cliente?.cpf_cnpj || '-'}</div>
                     </div>
                     <div className="bg-gray-50 rounded p-4">
                       <div className="font-bold mb-2 flex items-center gap-2">💼 Detalhes do Processo</div>

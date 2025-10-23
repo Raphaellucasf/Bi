@@ -38,7 +38,6 @@ export default function SimpleAutocomplete({ label, options, value, onChange, pl
         onChange={e => {
           setInputValue(e.target.value);
           setShowOptions(true);
-          // Não chama onChange("") aqui, só ao selecionar opção
         }}
         onFocus={() => setShowOptions(true)}
         onBlur={() => setTimeout(() => setShowOptions(false), 150)}
@@ -49,6 +48,7 @@ export default function SimpleAutocomplete({ label, options, value, onChange, pl
           if (e.key === 'Enter' && filtered.length > 0) {
             setInputValue(filtered[0].label);
             setShowOptions(false);
+            console.log('DEBUG [Autocomplete] selecionado via Enter:', filtered[0].value);
             onChange(filtered[0].value);
             inputRef.current.blur();
           }
@@ -63,6 +63,7 @@ export default function SimpleAutocomplete({ label, options, value, onChange, pl
               onMouseDown={() => {
                 setInputValue(opt.label);
                 setShowOptions(false);
+                console.log('DEBUG [Autocomplete] selecionado via clique:', opt.value);
                 onChange(opt.value);
                 inputRef.current.blur();
               }}

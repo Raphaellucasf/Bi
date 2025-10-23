@@ -60,9 +60,7 @@ const FaturamentoSummaryCards = ({ refreshKey = 0 }) => {
       if (error) throw error;
       receitaTotal = (data || []).reduce((sum, p) => sum + (Number(p.valor) || 0), 0);
       receitaTotalCount = (data || []).length;
-      console.log('[Cards] ReceitaTotal parcelasPagas:', receitaTotalCount, receitaTotal);
     } catch (e) {
-      console.warn('[Cards] Falha ao buscar parcelas pagas:', e.message);
     }
 
     // 2) Gastos do mês (Pagamentos)
@@ -75,9 +73,7 @@ const FaturamentoSummaryCards = ({ refreshKey = 0 }) => {
       if (error) throw error;
       pagamentos = (data || []).reduce((sum, g) => sum + (Number(g.valor) || 0), 0);
       pagamentosCount = (data || []).length;
-      console.log('[Cards] Gastos do mês:', pagamentosCount, pagamentos);
     } catch (e) {
-      console.warn('[Cards] Falha ao buscar gastos:', e.message);
     }
 
     // 3) Parcelas pendentes do mês (A Receber)
@@ -91,9 +87,7 @@ const FaturamentoSummaryCards = ({ refreshKey = 0 }) => {
       if (error) throw error;
       aReceberNoMes = (data || []).reduce((sum, p) => sum + (Number(p.valor) || 0), 0);
       aReceberNoMesCount = (data || []).length;
-      console.log('[Cards] AReceber parcelasPendentes:', aReceberNoMesCount, aReceberNoMes);
     } catch (e) {
-      console.warn('[Cards] Falha ao buscar parcelas pendentes:', e.message);
     }
 
     // 4) Novos acordos (Faturamentos do mês)
@@ -106,9 +100,7 @@ const FaturamentoSummaryCards = ({ refreshKey = 0 }) => {
       if (error) throw error;
       novosAcordosMes = (data || []).reduce((sum, f) => sum + (Number(f.valor_total) || 0), 0);
       novosAcordosMesCount = (data || []).length;
-      console.log('[Cards] Novos acordos no mês:', novosAcordosMesCount, novosAcordosMes);
     } catch (e) {
-      console.warn('[Cards] Falha ao buscar faturamentos:', e.message);
     }
 
     setMetrics({ receitaTotal, pagamentos, novosAcordosMes, aReceberNoMes });

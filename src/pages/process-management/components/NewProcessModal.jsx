@@ -11,9 +11,24 @@ import SimpleAutocomplete from "../../../components/ui/SimpleAutocomplete";
 import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
 
 // Função para buscar empresa no Supabase
-async function buscarEmpresaSupabase(cnpj) {
-  const { data } = await supabase.from("empresas").select("*").eq("cnpj", cnpj).single();
-  return data || null;
+async function buscarEmpresaSupabase(cnpjRaw) {
+  const cnpjMasked = (cnpjRaw || '').trim();
+  const cnpjDigits = cnpjMasked.replace(/\D/g, '');
+  // Tenta por igualdade exata (formato mascarado)
+  let { data, error } = await supabase.from("empresas").select("*").eq("cnpj", cnpjMasked).limit(1).maybeSingle();
+  if (data) return data;
+  // Se não encontrou, tenta uma busca aproximada contendo os 8 primeiros dígitos
+  if (!data && cnpjDigits.length >= 8) {
+    const prefix = cnpjDigits.slice(0, 8);
+    const likePattern = `%${prefix}%`;
+    const res = await supabase
+      .from("empresas")
+      .select("*")
+      .ilike("cnpj", likePattern)
+      .limit(1);
+    if (res.data && res.data.length > 0) return res.data[0];
+  }
+  return null;
 }
 
 // Função para buscar empresa na BrasilAPI
@@ -24,9 +39,16 @@ async function buscarEmpresaBrasilAPI(cnpj) {
     const data = await response.json();
     if (data.cnpj) {
       return {
-        razaoSocial: data.razao_social,
-        nomeFantasia: data.nome_fantasia,
-        enderecoRfb: `${data.descricao_tipo_de_logradouro} ${data.logradouro}, ${data.numero} - ${data.bairro}, ${data.municipio} - ${data.uf}, CEP: ${data.cep}`
+        razao_social: data.razao_social,
+        nome_fantasia: data.nome_fantasia,
+        cnpj: cnpj.replace(/\D/g, '').replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5'),
+        endereco_rfb: `${data.descricao_tipo_de_logradouro} ${data.logradouro}, ${data.numero} - ${data.bairro}, ${data.municipio} - ${data.uf}, CEP: ${data.cep}`,
+        endereco_trabalho: '',
+        advogado: '',
+        oab: '',
+        telefone: '',
+        email: '',
+        observacoes: ''
       };
     }
   } catch (e) {}
@@ -35,7 +57,24 @@ async function buscarEmpresaBrasilAPI(cnpj) {
 
 // Função para cadastrar empresa manualmente no Supabase
 async function cadastrarEmpresaSupabase(empresa) {
-  await supabase.from("empresas").insert([empresa]);
+  const empresaData = {
+    cnpj: empresa.cnpj,
+    razao_social: empresa.razao_social || empresa.razaoSocial,
+    nome_fantasia: empresa.nome_fantasia || empresa.nomeFantasia,
+    endereco_rfb: empresa.endereco_rfb || empresa.enderecoRfb,
+    endereco_trabalho: empresa.endereco_trabalho || empresa.enderecoTrabalho,
+    advogado: empresa.advogado,
+    oab: empresa.oab,
+    telefone: empresa.telefone,
+    email: empresa.email,
+    observacoes: empresa.observacoes
+  };
+  
+  const { error } = await supabase.from("empresas").insert([empresaData]);
+  if (error) {
+    console.error('ERRO ao cadastrar empresa:', error);
+    throw error;
+  }
 }
 
 
@@ -82,13 +121,36 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
             honorarios: data.honorarios || "",
             juiz: data.juiz || "",
             proxima_audiencia: data.proxima_audiencia || "",
-            patrono: data.patrono_id || "",
-            cliente: data.cliente_id || "",
+            patrono: data.patrono_id ? String(data.patrono_id) : "",
+            cliente: data.cliente_id ? String(data.cliente_id) : "",
             escritorio: data.escritorio_id || "",
             competencia: data.competencia_vara || "",
             ativo: data.ativo || "",
             empresas: []
           });
+          
+          // Buscar partes contrárias vinculadas ao processo
+          const { data: processosEmpresas } = await supabase
+            .from('processos_empresas')
+            .select('empresa_id, empresa:empresas!empresa_id(*)')
+            .eq('processo_id', process.id);
+          
+          if (processosEmpresas && processosEmpresas.length > 0) {
+            const partes = processosEmpresas.map(pe => ({
+              razaoSocial: pe.empresa?.razao_social || "",
+              nomeFantasia: pe.empresa?.nome_fantasia || "",
+              cnpj: pe.empresa?.cnpj || "",
+              enderecoRfb: pe.empresa?.endereco_rfb || "",
+              enderecoTrabalho: pe.empresa?.endereco_trabalho || "",
+              advogado: pe.empresa?.advogado || "",
+              oab: pe.empresa?.oab || "",
+              telefone: pe.empresa?.telefone || "",
+              email: pe.empresa?.email || "",
+              observacoes: pe.empresa?.observacoes || ""
+            }));
+            setPartesContrarias(partes);
+          }
+          
           setEditError("");
         } catch (err) {
           setEditError(err.message || "Erro inesperado ao buscar processo.");
@@ -114,6 +176,7 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
   const [empresas, setEmpresas] = useState([]);
   const [empresasSelecionadas, setEmpresasSelecionadas] = useState([]);
   const [error, setError] = useState(null);
+  const [cnpjLookupTick, setCnpjLookupTick] = useState(0);
 
   useEffect(() => {
     async function fetchData() {
@@ -123,25 +186,93 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
         const { data: empresasData } = await supabase.from("empresas").select("id, nome_fantasia");
         setClientes(clientesData || []);
         setPatronos(patronosData || []);
-        setEmpresas(empresasData || []);
       } catch (err) {
         setError(err.message || "Erro ao buscar dados");
         setClientes([]);
         setPatronos([]);
         setEmpresas([]);
+        window.patronosValidos = [];
       }
     }
     fetchData();
   }, []);
 
+  // Busca automática quando CNPJ atingir 14 dígitos
+  useEffect(() => {
+    const cnpjDigits = (parteForm.cnpj || '').replace(/\D/g, '');
+    if (cnpjDigits.length !== 14) return;
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        console.log('DEBUG auto-lookup CNPJ:', parteForm.cnpj);
+        let empresa = await buscarEmpresaSupabase(parteForm.cnpj);
+        console.log('DEBUG auto buscarEmpresaSupabase:', empresa);
+        if (!empresa) {
+          empresa = await buscarEmpresaBrasilAPI(parteForm.cnpj);
+          console.log('DEBUG auto buscarEmpresaBrasilAPI:', empresa);
+          if (empresa) {
+            const mapped = {
+              razaoSocial: empresa.razao_social || empresa.razaoSocial || "",
+              nomeFantasia: empresa.nome_fantasia || empresa.nomeFantasia || "",
+              cnpj: empresa.cnpj || parteForm.cnpj,
+              enderecoRfb: empresa.endereco_rfb || empresa.enderecoRfb || "",
+              enderecoTrabalho: empresa.endereco_trabalho || empresa.enderecoTrabalho || "",
+              advogado: empresa.advogado || "",
+              oab: empresa.oab || "",
+              telefone: empresa.telefone || "",
+              email: empresa.email || "",
+              observacoes: empresa.observacoes || ""
+            };
+            setParteForm(f => ({ ...f, ...mapped }));
+            try {
+              await cadastrarEmpresaSupabase({ cnpj: mapped.cnpj, razao_social: mapped.razaoSocial, nome_fantasia: mapped.nomeFantasia, endereco_rfb: mapped.enderecoRfb, endereco_trabalho: mapped.enderecoTrabalho, advogado: mapped.advogado, oab: mapped.oab, telefone: mapped.telefone, email: mapped.email, observacoes: mapped.observacoes });
+            } catch (err) {
+              console.warn('DEBUG cadastrarEmpresaSupabase erro (não fatal):', err.message || err);
+            }
+          }
+        } else {
+          const mapped = {
+            razaoSocial: empresa.razao_social || empresa.razaoSocial || "",
+            nomeFantasia: empresa.nome_fantasia || empresa.nomeFantasia || "",
+            cnpj: empresa.cnpj || parteForm.cnpj,
+            enderecoRfb: empresa.endereco_rfb || empresa.enderecoRfb || "",
+            enderecoTrabalho: empresa.endereco_trabalho || empresa.enderecoTrabalho || "",
+            advogado: empresa.advogado || "",
+            oab: empresa.oab || "",
+            telefone: empresa.telefone || "",
+            email: empresa.email || "",
+            observacoes: empresa.observacoes || ""
+          };
+          setParteForm(f => ({ ...f, ...mapped }));
+        }
+      } catch (e) {
+        console.warn('DEBUG auto-lookup error:', e);
+      }
+    }, 350); // debounce
+    return () => { clearTimeout(t); controller.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parteForm.cnpj, cnpjLookupTick]);
+
   // Função para salvar processo
   const handleSave = () => {
-    console.log('DEBUG [Modal] cliente selecionado:', form.cliente);
+    console.log('DEBUG [Modal] cliente selecionado:', form.cliente, typeof form.cliente);
+    console.log('DEBUG [Modal] clientes disponíveis:', clientes);
     // Garante que o id do cliente é passado
     onSave({
       ...form,
       cliente: form.cliente,
-      partesContrarias,
+      partesContrarias: partesContrarias.map(parte => ({
+        cnpj: parte.cnpj,
+        razaoSocial: parte.razaoSocial,
+        nomeFantasia: parte.nomeFantasia,
+        enderecoRfb: parte.enderecoRfb,
+        enderecoTrabalho: parte.enderecoTrabalho,
+        advogado: parte.advogado,
+        oab: parte.oab,
+        telefone: parte.telefone,
+        email: parte.email,
+        observacoes: parte.observacoes
+      }))
     });
   };
 
@@ -165,15 +296,19 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Cliente *</label>
                 <SimpleAutocomplete
-                  options={clientes.map(c => ({ value: c.id, label: c.nome_completo }))}
-                  value={form.cliente}
-                  onChange={v => setForm(f => ({ ...f, cliente: v }))}
+                  options={clientes.map(c => ({ value: String(c.id), label: c.nome_completo }))}
+                  value={form.cliente ? String(form.cliente) : ''}
+                  onChange={v => setForm(f => ({ ...f, cliente: String(v) }))}
                   required
                   placeholder="Selecione o cliente..."
+                  className={(!form.cliente ? 'border-red-500' : '')}
                 />
+                {!form.cliente && (
+                  <div className="text-xs text-red-500 mt-1">Selecione um cliente válido.</div>
+                )}
                 {form.cliente && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    Cliente selecionado: {clientes.find(c => c.id === form.cliente)?.nome_completo || "(id inválido)"}
+                    Cliente selecionado: {clientes.find(c => String(c.id) === String(form.cliente))?.nome_completo || "(id inválido)"}
                   </div>
                 )}
               </div>
@@ -291,7 +426,7 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
             <div className="flex justify-end mt-8">
               <Button type="button" className="mr-2" variant="secondary" onClick={onClose}>Cancelar</Button>
               <Button type="button" className="bg-blue-600 text-white" onClick={() => setStep(2)}>Avançar para Parte Contrária</Button>
-              <Button type="button" className="bg-green-600 text-white ml-2" onClick={handleSave}>Salvar Processo</Button>
+              <Button type="button" className="bg-green-600 text-white ml-2" onClick={handleSave} disabled={!form.cliente}>Salvar Processo</Button>
             </div>
           </form>
         )}
@@ -317,17 +452,52 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
                   onChange={e => setParteForm(f => ({ ...f, cnpj: e.target.value }))}
                   onBlur={async e => {
                     const cnpj = e.target.value;
+                    console.log('DEBUG onBlur CNPJ:', cnpj);
                     if (cnpj.replace(/\D/g,"").length === 14) {
                       let empresa = await buscarEmpresaSupabase(cnpj);
+                      console.log('DEBUG buscarEmpresaSupabase:', empresa);
                       if (!empresa) {
                         empresa = await buscarEmpresaBrasilAPI(cnpj);
+                        console.log('DEBUG buscarEmpresaBrasilAPI:', empresa);
                         if (empresa) {
-                          setParteForm(f => ({ ...f, ...empresa, cnpj }));
-                          await cadastrarEmpresaSupabase({ cnpj, ...empresa });
+                          const mapped = {
+                            razaoSocial: empresa.razao_social || empresa.razaoSocial || "",
+                            nomeFantasia: empresa.nome_fantasia || empresa.nomeFantasia || "",
+                            cnpj: empresa.cnpj || cnpj,
+                            enderecoRfb: empresa.endereco_rfb || empresa.enderecoRfb || "",
+                            enderecoTrabalho: empresa.endereco_trabalho || empresa.enderecoTrabalho || "",
+                            advogado: empresa.advogado || "",
+                            oab: empresa.oab || "",
+                            telefone: empresa.telefone || "",
+                            email: empresa.email || "",
+                            observacoes: empresa.observacoes || ""
+                          };
+                          console.log('DEBUG onBlur mapped form (BrasilAPI):', mapped);
+                          setParteForm(mapped);
+                          try {
+                            await cadastrarEmpresaSupabase({ cnpj: mapped.cnpj, razao_social: mapped.razaoSocial, nome_fantasia: mapped.nomeFantasia, endereco_rfb: mapped.enderecoRfb, endereco_trabalho: mapped.enderecoTrabalho, advogado: mapped.advogado, oab: mapped.oab, telefone: mapped.telefone, email: mapped.email, observacoes: mapped.observacoes });
+                          } catch (err) {
+                            console.warn('DEBUG cadastrarEmpresaSupabase erro (não fatal):', err.message || err);
+                          }
                         }
                       } else {
-                        setParteForm(f => ({ ...f, ...empresa, cnpj }));
+                        const mapped = {
+                          razaoSocial: empresa.razao_social || empresa.razaoSocial || "",
+                          nomeFantasia: empresa.nome_fantasia || empresa.nomeFantasia || "",
+                          cnpj: empresa.cnpj || cnpj,
+                          enderecoRfb: empresa.endereco_rfb || empresa.enderecoRfb || "",
+                          enderecoTrabalho: empresa.endereco_trabalho || empresa.enderecoTrabalho || "",
+                          advogado: empresa.advogado || "",
+                          oab: empresa.oab || "",
+                          telefone: empresa.telefone || "",
+                          email: empresa.email || "",
+                          observacoes: empresa.observacoes || ""
+                        };
+                        console.log('DEBUG onBlur mapped form (Supabase):', mapped);
+                        setParteForm(mapped);
                       }
+                    } else {
+                      console.log('DEBUG CNPJ inválido para busca:', cnpj);
                     }
                   }}
                   className="input input-bordered w-full"
@@ -421,7 +591,7 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
             <div className="flex justify-between items-center mt-8 gap-2">
               <Button type="button" variant="secondary" onClick={() => setStep(1)}>Voltar</Button>
               <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-              <Button type="button" className="bg-blue-600 text-white" onClick={() => onSave(partesContrarias)}>Salvar</Button>
+              <Button type="button" className="bg-blue-600 text-white" onClick={handleSave}>Salvar</Button>
             </div>
           </form>
         )}
