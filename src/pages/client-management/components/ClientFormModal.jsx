@@ -43,6 +43,7 @@ import Select from "../../../components/ui/Select";
 import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
 import Input from "../../../components/ui/Input";
 import { getIndicadores, addIndicador } from "../../../services/indicadoresService";
+import { buscarCPF, validarCPF } from "../../../services/cpfHubService";
 
 const initialState = {
   nome_completo: "",
@@ -79,6 +80,7 @@ const ClientFormModal = ({ isOpen, onClose, client, onSave, loading, escritorioI
   const [indicadores, setIndicadores] = useState([]);
   const [indicadorInput, setIndicadorInput] = useState("");
   const [indicadorLoading, setIndicadorLoading] = useState(false);
+  const [cpfBuscaLoading, setCpfBuscaLoading] = useState(false);
 
   useEffect(() => {
     if (client) setForm(client);
@@ -135,6 +137,57 @@ function formatCNPJ(value) {
     }
   };
 
+  // Busca automática de CPF quando completar 11 dígitos
+  const handleCpfBlur = async (e) => {
+    const cpf = e.target.value;
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    
+    // Só busca se for CPF de pessoa física e tiver 11 dígitos
+    if (form.tipo_pessoa === "Pessoa Física" && cpfLimpo.length === 11) {
+      if (!validarCPF(cpf)) {
+        setError("CPF inválido");
+        return;
+      }
+      
+      setCpfBuscaLoading(true);
+      setError("");
+      
+      try {
+        console.log('🔍 Buscando dados do CPF:', cpf);
+        const dadosCpf = await buscarCPF(cpf);
+        
+        if (dadosCpf) {
+          console.log('✅ Dados encontrados:', dadosCpf);
+          // Preenche automaticamente os campos encontrados
+          setForm(f => ({
+            ...f,
+            nome_completo: dadosCpf.nome_completo || f.nome_completo,
+            data_nascimento: dadosCpf.data_nascimento || f.data_nascimento,
+            nome_mae: dadosCpf.mae || f.nome_mae,
+            endereco: dadosCpf.endereco ? 
+              `${dadosCpf.endereco.logradouro}, ${dadosCpf.endereco.numero} - ${dadosCpf.endereco.bairro}, ${dadosCpf.endereco.cidade}/${dadosCpf.endereco.uf}` 
+              : f.endereco,
+            telefone_celular: dadosCpf.telefones?.[0] || f.telefone_celular,
+            email: dadosCpf.emails?.[0] || f.email
+          }));
+          setError("✅ Dados preenchidos automaticamente via CPFHub");
+        } else {
+          console.log('ℹ️ CPF não encontrado na base de dados');
+          setError("ℹ️ CPF não encontrado na base de dados");
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar CPF:', error);
+        if (error.message.includes('Limite de consultas')) {
+          setError("⚠️ Limite mensal de consultas CPF atingido (50/mês)");
+        } else {
+          setError("❌ Erro ao buscar dados do CPF");
+        }
+      } finally {
+        setCpfBuscaLoading(false);
+      }
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.nome_completo || !form.cpf_cnpj) {
@@ -160,12 +213,20 @@ function formatCNPJ(value) {
           <Input name="rg" label="RG" placeholder="00.000.000-0" value={form.rg} onChange={handleChange} />
           <Input
             name="cpf_cnpj"
-            label={form.type === "Pessoa Jurídica" ? "CNPJ *" : "CPF *"}
-            placeholder={form.type === "Pessoa Jurídica" ? "00.000.000/0000-00" : "000.000.000-00"}
+            label={form.tipo_pessoa === "Pessoa Jurídica" ? "CNPJ *" : "CPF *"}
+            placeholder={form.tipo_pessoa === "Pessoa Jurídica" ? "00.000.000/0000-00" : "000.000.000-00"}
             value={form.cpf_cnpj}
             onChange={handleChange}
+            onBlur={form.tipo_pessoa === "Pessoa Física" ? handleCpfBlur : undefined}
             required
+            disabled={cpfBuscaLoading}
           />
+          {cpfBuscaLoading && (
+            <div className="col-span-2 text-blue-600 text-sm flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              Buscando dados do CPF...
+            </div>
+          )}
           <Input name="pis" label="PIS" placeholder="000.00000.00-0" value={form.pis} onChange={handleChange} />
           <Input name="telefone_celular" label="Telefone Celular" placeholder="(11) 99999-9999" value={form.telefone_celular} onChange={handleChange} />
           <Input name="telefone_para_contato" label="Telefone para Contato" placeholder="(11) 3333-3333" value={form.telefone_para_contato} onChange={handleChange} />

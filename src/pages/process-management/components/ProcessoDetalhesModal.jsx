@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import Button from "../../../components/ui/Button";
-import AndamentoModal from "./AndamentoModal";
+import { FaseAndamentoSelector } from '../../../components/ui/FaseAndamentoSelector';
 
 
 function ProcessoDetalhesModal({ processoId, open, onClose }) {
-  const [showAndamentoModal, setShowAndamentoModal] = useState(false);
   const [aba, setAba] = useState(0);
   const [processo, setProcesso] = useState(null);
   const [cliente, setCliente] = useState(null);
@@ -14,6 +13,19 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
   const [receitas, setReceitas] = useState([]);
   const [gastos, setGastos] = useState([]);
   const [documentos, setDocumentos] = useState([]);
+  
+  // Estados para Fase e Andamento Processual
+  const [faseId, setFaseId] = useState(null);
+  const [andamentoId, setAndamentoId] = useState(null);
+  const [observacoesAndamento, setObservacoesAndamento] = useState('');
+  const [savingFase, setSavingFase] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  // Função para mostrar notificação
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   useEffect(() => {
     if (!processoId || !open) return;
@@ -30,6 +42,10 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
         }
         console.log('DEBUG [ProcessoDetalhes] processo:', data);
         setProcesso(data);
+        // Carregar fase e andamento do processo
+        setFaseId(data.fase_id || null);
+        setAndamentoId(data.andamento_id || null);
+        setObservacoesAndamento(data.observacoes_andamento || '');
         // Buscar cliente separadamente
         if (data?.cliente_id) {
           console.log('DEBUG [ProcessoDetalhes] buscando cliente com id:', data.cliente_id);
@@ -67,8 +83,18 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto my-8 p-8 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 overflow-y-auto">
+      {/* Notificação Toast */}
+      {notification && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-[60] flex items-center gap-2 animate-fade-in ${
+          notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          <span>{notification.type === 'success' ? '✓' : '✗'}</span>
+          <span>{notification.message}</span>
+        </div>
+      )}
+      
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto my-auto p-4 sm:p-6 md:p-8 relative max-h-[95vh] overflow-y-auto">
         <button
           className="absolute top-4 right-4 text-xl text-muted-foreground hover:text-black"
           onClick={onClose}
@@ -122,13 +148,61 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
           )}
           {aba === 1 && (
             <div>
-              {/* Andamentos */}
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg">Andamentos</h3>
-                <Button onClick={() => setShowAndamentoModal(true)}>+ Novo Andamento</Button>
+              {/* Seletor de Fase e Andamento Processual - Substitui o botão "+ Novo Andamento" */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 mb-6">
+                <FaseAndamentoSelector
+                  faseId={faseId}
+                  andamentoId={andamentoId}
+                  observacoes={observacoesAndamento}
+                  onFaseChange={setFaseId}
+                  onAndamentoChange={setAndamentoId}
+                  onObservacoesChange={setObservacoesAndamento}
+                  processoId={processoId}
+                  showHistory={true}
+                />
+                
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={async () => {
+                      if (!processoId) return;
+                      setSavingFase(true);
+                      try {
+                        const { error } = await supabase
+                          .from('processos')
+                          .update({
+                            fase_id: faseId,
+                            andamento_id: andamentoId,
+                            observacoes_andamento: observacoesAndamento
+                          })
+                          .eq('id', processoId);
+                        
+                        if (error) {
+                          console.error('Erro ao atualizar fase/andamento:', error);
+                          showNotification('Erro ao salvar fase e andamento', 'error');
+                        } else {
+                          showNotification('Fase e andamento atualizados com sucesso!', 'success');
+                        }
+                      } catch (err) {
+                        console.error('Erro ao salvar:', err);
+                        showNotification('Erro ao salvar fase e andamento', 'error');
+                      } finally {
+                        setSavingFase(false);
+                      }
+                    }}
+                    disabled={savingFase}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors w-full sm:w-auto text-sm sm:text-base"
+                  >
+                    {savingFase ? 'Salvando...' : 'Salvar Fase e Andamento'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista de Andamentos (histórico) */}
+              <div className="mb-4">
+                <h3 className="font-semibold text-base sm:text-lg mb-4">Histórico de Andamentos</h3>
               </div>
               {andamentos.length === 0 ? (
-                <div className="text-muted-foreground">Nenhum andamento cadastrado.</div>
+                <div className="text-center text-muted-foreground py-8">Nenhum andamento cadastrado.</div>
               ) : (
                 <ul className="space-y-2">
                   {andamentos.map(a => (
@@ -141,19 +215,6 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
                   ))}
                 </ul>
               )}
-              <AndamentoModal
-                open={showAndamentoModal}
-                onClose={() => setShowAndamentoModal(false)}
-                processoId={processoId}
-                onSave={async andamento => {
-                  // Salvar no Supabase
-                  await supabase.from('andamentos').insert([andamento]);
-                  setShowAndamentoModal(false);
-                  // Atualizar lista
-                  const { data } = await supabase.from('andamentos').select('*').eq('processo_id', processoId).order('data_final', { ascending: true });
-                  setAndamentos(data || []);
-                }}
-              />
             </div>
           )}
           {aba === 2 && (

@@ -55,7 +55,7 @@ export default function SimpleAutocomplete({ label, options, value, onChange, pl
         }}
       />
       {showOptions && filtered.length > 0 && (
-        <div className="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-60 overflow-auto">
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl z-[9999] max-h-60 overflow-auto">
           {filtered.map(opt => (
             <div
               key={opt.value}

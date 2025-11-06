@@ -2,13 +2,15 @@ import React from "react";
 import Icon from "../../../components/AppIcon";
 import { supabase } from '../../../services/supabaseClient';
 import { formatProperName } from '../../../utils/formatters';
+import ProcessActionModal from './ProcessActionModal';
 
-function ClientDetailsModal({ client, onClose }) {
+function ClientDetailsModal({ client, onClose, onEditProcess, onViewProcessDetails }) {
   const getFirstNames = nome => nome?.split(' ').slice(0,2).join(' ');
   const [processos, setProcessos] = React.useState([]);
   const [comentarios, setComentarios] = React.useState([]);
   const [showAddComment, setShowAddComment] = React.useState(false);
   const [novoComentario, setNovoComentario] = React.useState({ tipo: 'Nota', texto: '' });
+  const [selectedProcess, setSelectedProcess] = React.useState(null);
   const tipoOptions = ['Nota', 'Reunião', 'Ligação', 'Email'];
 
   React.useEffect(() => {
@@ -60,12 +62,16 @@ function ClientDetailsModal({ client, onClose }) {
             {processos.length === 0 ? <div className="text-muted-foreground text-sm">Nenhum processo vinculado</div> : (
               <ul className="space-y-2">
                 {processos.map(proc => (
-                  <li key={proc.id} className="bg-blue-100 rounded p-3 flex justify-between items-center cursor-pointer hover:bg-blue-200 transition" onClick={() => alert('Abrir processo ' + proc.id)}>
+                  <li 
+                    key={proc.id} 
+                    className="bg-blue-100 rounded p-3 flex justify-between items-center cursor-pointer hover:bg-blue-200 transition" 
+                    onClick={() => setSelectedProcess(proc)}
+                  >
                     <div>
                       <div className="font-semibold text-sm">{formatProperName(proc.titulo)}</div>
                       <div className="text-xs text-muted-foreground">Nº {proc.numero_processo} - {proc.status}</div>
                     </div>
-                    <Icon name="Eye" size={18} />
+                    <Icon name="MoreVertical" size={18} />
                   </li>
                 ))}
               </ul>
@@ -103,6 +109,20 @@ function ClientDetailsModal({ client, onClose }) {
             )}
           </div>
         </div>
+
+        {/* Modal de ações do processo */}
+        {selectedProcess && (
+          <ProcessActionModal
+            process={selectedProcess}
+            onClose={() => setSelectedProcess(null)}
+            onEdit={(process) => {
+              if (onEditProcess) onEditProcess(process);
+            }}
+            onViewDetails={(process) => {
+              if (onViewProcessDetails) onViewProcessDetails(process);
+            }}
+          />
+        )}
       </div>
     </div>
   );

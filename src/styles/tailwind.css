@@ -69,3 +69,10 @@
     text-wrap: balance;
   }
 }
+/* Utilitários de responsividade */
+.responsive-padding { @apply px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6; }
+.responsive-text { @apply text-sm sm:text-base; }
+.responsive-heading { @apply text-lg sm:text-xl md:text-2xl; }
+.responsive-container { @apply w-full max-w-full mx-auto px-4 sm:px-6 lg:px-8; }
+.smooth-scroll { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+

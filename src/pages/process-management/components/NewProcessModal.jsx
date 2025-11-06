@@ -9,6 +9,8 @@ import MaskedDateInput from "../../../components/ui/MaskedDateInput";
 import InputMask from "react-input-mask";
 import SimpleAutocomplete from "../../../components/ui/SimpleAutocomplete";
 import { ShadcnSelect } from "../../../components/ui/ShadcnSelect";
+import { buscarCPF } from "../../../services/cpfHubService";
+import Icon from "../../../components/AppIcon";
 
 // Função para buscar empresa no Supabase
 async function buscarEmpresaSupabase(cnpjRaw) {
@@ -73,6 +75,55 @@ async function cadastrarEmpresaSupabase(empresa) {
   const { error } = await supabase.from("empresas").insert([empresaData]);
   if (error) {
     console.error('ERRO ao cadastrar empresa:', error);
+    throw error;
+  }
+}
+
+// Função para buscar pessoa física no Supabase
+async function buscarPessoaFisicaSupabase(cpfRaw) {
+  const cpfMasked = (cpfRaw || '').trim();
+  const cpfDigits = cpfMasked.replace(/\D/g, '');
+  
+  // Tenta por igualdade exata (formato mascarado)
+  let { data, error } = await supabase
+    .from("pessoas_fisicas")
+    .select("*")
+    .eq("cpf", cpfMasked)
+    .limit(1)
+    .maybeSingle();
+  
+  if (data) return data;
+  
+  // Se não encontrou, tenta busca por CPF sem máscara
+  if (!data && cpfDigits.length === 11) {
+    const res = await supabase
+      .from("pessoas_fisicas")
+      .select("*")
+      .ilike("cpf", `%${cpfDigits}%`)
+      .limit(1);
+    if (res.data && res.data.length > 0) return res.data[0];
+  }
+  
+  return null;
+}
+
+// Função para cadastrar pessoa física no Supabase
+async function cadastrarPessoaFisicaSupabase(pessoa) {
+  const pessoaData = {
+    cpf: pessoa.cpf,
+    nome_completo: pessoa.nome_completo || pessoa.nomeCompleto,
+    endereco_rfb: pessoa.endereco_rfb || pessoa.enderecoRfb,
+    endereco_trabalho: pessoa.endereco_trabalho || pessoa.enderecoTrabalho,
+    advogado: pessoa.advogado,
+    oab: pessoa.oab,
+    telefone: pessoa.telefone,
+    email: pessoa.email,
+    observacoes: pessoa.observacoes
+  };
+  
+  const { error } = await supabase.from("pessoas_fisicas").insert([pessoaData]);
+  if (error) {
+    console.error('ERRO ao cadastrar pessoa física:', error);
     throw error;
   }
 }
@@ -159,10 +210,13 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
     }
   }, [isEdit, process]);
   const [partesContrarias, setPartesContrarias] = useState([]);
+  const [tipoDocumento, setTipoDocumento] = useState("cnpj"); // 'cnpj' ou 'cpf'
   const [parteForm, setParteForm] = useState({
+    tipo: "cnpj", // 'cnpj' ou 'cpf'
     razaoSocial: "",
     nomeFantasia: "",
     cnpj: "",
+    cpf: "",
     enderecoRfb: "",
     enderecoTrabalho: "",
     advogado: "",
@@ -253,6 +307,90 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parteForm.cnpj, cnpjLookupTick]);
 
+  // Busca automática quando CPF atingir 11 dígitos
+  useEffect(() => {
+    // Só executa se o tipo for CPF
+    if (tipoDocumento !== 'cpf') return;
+    
+    const cpfDigits = (parteForm.cpf || '').replace(/\D/g, '');
+    if (cpfDigits.length !== 11) return;
+    
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        console.log('🔍 DEBUG auto-lookup CPF:', parteForm.cpf);
+        
+        // Primeiro busca no Supabase
+        let pessoaFisica = await buscarPessoaFisicaSupabase(parteForm.cpf);
+        console.log('💾 DEBUG buscarPessoaFisicaSupabase:', pessoaFisica);
+        
+        if (!pessoaFisica) {
+          // Se não encontrou no Supabase, busca no CPFHub
+          const dadosCpf = await buscarCPF(parteForm.cpf);
+          console.log('🌐 DEBUG buscarCPF (CPFHub):', dadosCpf);
+          
+          if (dadosCpf) {
+            const enderecoCompleto = dadosCpf.endereco ? 
+              `${dadosCpf.endereco.logradouro}, ${dadosCpf.endereco.numero} - ${dadosCpf.endereco.bairro}, ${dadosCpf.endereco.cidade}/${dadosCpf.endereco.uf}` : '';
+            
+            const mapped = {
+              tipo: "cpf",
+              nomeCompleto: dadosCpf.nome_completo || "",
+              cpf: dadosCpf.cpf || parteForm.cpf,
+              enderecoRfb: enderecoCompleto,
+              enderecoTrabalho: "",
+              advogado: "",
+              oab: "",
+              telefone: dadosCpf.telefones && dadosCpf.telefones.length > 0 ? dadosCpf.telefones[0] : "",
+              email: dadosCpf.emails && dadosCpf.emails.length > 0 ? dadosCpf.emails[0] : "",
+              observacoes: dadosCpf.mae ? `Mãe: ${dadosCpf.mae}` : ""
+            };
+            console.log('✅ DEBUG mapped form (CPFHub):', mapped);
+            setParteForm(f => ({ ...f, ...mapped }));
+            
+            // Cadastra no Supabase para futuras consultas
+            try {
+              await cadastrarPessoaFisicaSupabase({
+                cpf: mapped.cpf,
+                nome_completo: mapped.nomeCompleto,
+                endereco_rfb: mapped.enderecoRfb,
+                endereco_trabalho: mapped.enderecoTrabalho,
+                advogado: mapped.advogado,
+                oab: mapped.oab,
+                telefone: mapped.telefone,
+                email: mapped.email,
+                observacoes: mapped.observacoes
+              });
+            } catch (err) {
+              console.warn('⚠️ DEBUG cadastrarPessoaFisicaSupabase erro (não fatal):', err.message || err);
+            }
+          }
+        } else {
+          // Encontrou no Supabase
+          const mapped = {
+            tipo: "cpf",
+            nomeCompleto: pessoaFisica.nome_completo || "",
+            cpf: pessoaFisica.cpf || parteForm.cpf,
+            enderecoRfb: pessoaFisica.endereco_rfb || "",
+            enderecoTrabalho: pessoaFisica.endereco_trabalho || "",
+            advogado: pessoaFisica.advogado || "",
+            oab: pessoaFisica.oab || "",
+            telefone: pessoaFisica.telefone || "",
+            email: pessoaFisica.email || "",
+            observacoes: pessoaFisica.observacoes || ""
+          };
+          console.log('✅ DEBUG mapped form (Supabase):', mapped);
+          setParteForm(f => ({ ...f, ...mapped }));
+        }
+      } catch (e) {
+        console.warn('❌ DEBUG auto-lookup CPF error:', e);
+      }
+    }, 350); // debounce
+    
+    return () => { clearTimeout(t); controller.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parteForm.cpf, tipoDocumento]);
+
   // Função para salvar processo
   const handleSave = () => {
     console.log('DEBUG [Modal] cliente selecionado:', form.cliente, typeof form.cliente);
@@ -262,8 +400,11 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
       ...form,
       cliente: form.cliente,
       partesContrarias: partesContrarias.map(parte => ({
+        tipo: parte.tipo || "cnpj",
         cnpj: parte.cnpj,
+        cpf: parte.cpf,
         razaoSocial: parte.razaoSocial,
+        nomeCompleto: parte.nomeCompleto,
         nomeFantasia: parte.nomeFantasia,
         enderecoRfb: parte.enderecoRfb,
         enderecoTrabalho: parte.enderecoTrabalho,
@@ -277,22 +418,22 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 overflow-y-auto">
       {editError && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded shadow-lg z-50">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded shadow-lg z-[60] max-w-[90vw] text-center">
           Erro ao carregar processo: {editError}
         </div>
       )}
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-auto my-8 p-8 relative">
-        <button className="absolute top-4 right-4 text-xl text-muted-foreground hover:text-black" onClick={onClose} aria-label="Fechar">×</button>
-        <h2 className="text-2xl font-bold mb-8">Novo Processo</h2>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-auto my-auto p-4 sm:p-6 md:p-8 relative max-h-[95vh] overflow-y-auto">
+        <button className="absolute top-3 right-3 sm:top-4 sm:right-4 text-2xl sm:text-xl text-muted-foreground hover:text-black z-10" onClick={onClose} aria-label="Fechar">×</button>
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 md:mb-8 pr-8">Novo Processo</h2>
         {step === 1 && (
-          <form className="w-full" onSubmit={e => e.preventDefault()}>
-            <div className="mb-4">
-              <label className="font-semibold text-lg block mb-2">Título do Processo *</label>
+          <form className="w-full space-y-4 sm:space-y-6" onSubmit={e => e.preventDefault()}>
+            <div>
+              <label className="font-semibold text-base sm:text-lg block mb-2">Título do Processo *</label>
               <Input required value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div className="flex flex-col gap-2">
                 <label className="font-semibold text-sm">Cliente *</label>
                 <SimpleAutocomplete
@@ -417,37 +558,118 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
                 <Input value={form.juiz} onChange={e => setForm(f => ({ ...f, juiz: e.target.value }))} />
               </div>
             </div>
+            
             <div className="flex flex-col gap-2 mb-4">
               <label className="font-semibold text-sm">Descrição do Caso</label>
               <Input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} multiline />
             </div>
             {/* Campo 'Empresas associadas' removido conforme solicitado */}
             {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
-            <div className="flex justify-end mt-8">
-              <Button type="button" className="mr-2" variant="secondary" onClick={onClose}>Cancelar</Button>
-              <Button type="button" className="bg-blue-600 text-white" onClick={() => setStep(2)}>Avançar para Parte Contrária</Button>
-              <Button type="button" className="bg-green-600 text-white ml-2" onClick={handleSave} disabled={!form.cliente}>Salvar Processo</Button>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-0 mt-6 sm:mt-8">
+              <Button type="button" className="sm:mr-2 w-full sm:w-auto" variant="secondary" onClick={onClose}>Cancelar</Button>
+              <Button type="button" className="bg-blue-600 text-white w-full sm:w-auto" onClick={() => setStep(2)}>Avançar para Parte Contrária</Button>
+              <Button type="button" className="bg-green-600 text-white sm:ml-2 w-full sm:w-auto" onClick={handleSave} disabled={!form.cliente}>Salvar Processo</Button>
             </div>
           </form>
         )}
         {step === 2 && (
-          <form className="w-full" onSubmit={e => e.preventDefault()}>
-            <h2 className="text-2xl font-bold mb-8">Adicionar Parte Contrária</h2>
+          <form className="w-full space-y-4 sm:space-y-6" onSubmit={e => e.preventDefault()}>
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 md:mb-8">Adicionar Parte Contrária</h2>
             {/* Chips de partes já adicionadas */}
             {partesContrarias.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {partesContrarias.map((parte, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-gray-100 rounded-full text-sm border border-gray-300">
-                    {parte.razaoSocial} ({parte.cnpj})
-                  </span>
-                ))}
+              <div>
+                <p className="text-sm font-semibold mb-2">Partes adicionadas:</p>
+                <div className="flex flex-wrap gap-2">
+                  {partesContrarias.map((parte, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-blue-50 rounded-full text-sm border border-blue-200 flex items-center gap-2">
+                      <span>
+                        {parte.razaoSocial || parte.nomeCompleto} ({parte.cnpj || parte.cpf})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPartesContrarias(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="text-red-500 hover:text-red-700 font-bold"
+                        aria-label="Remover parte"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-              <div className="flex flex-col gap-2 col-span-2">
-                <label className="font-semibold text-sm">CNPJ *</label>
-                <InputMask
-                  mask="99.999.999/9999-99"
+            
+            {/* Seletor de tipo de documento */}
+            <div>
+              <label className="font-semibold text-sm block mb-2">Tipo de Parte Contrária</label>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="tipoDocumento"
+                    value="cnpj"
+                    checked={tipoDocumento === "cnpj"}
+                    onChange={(e) => {
+                      setTipoDocumento(e.target.value);
+                      setParteForm({
+                        tipo: "cnpj",
+                        razaoSocial: "",
+                        nomeFantasia: "",
+                        cnpj: "",
+                        cpf: "",
+                        enderecoRfb: "",
+                        enderecoTrabalho: "",
+                        advogado: "",
+                        oab: "",
+                        telefone: "",
+                        email: "",
+                        observacoes: ""
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">Pessoa Jurídica (CNPJ)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="tipoDocumento"
+                    value="cpf"
+                    checked={tipoDocumento === "cpf"}
+                    onChange={(e) => {
+                      setTipoDocumento(e.target.value);
+                      setParteForm({
+                        tipo: "cpf",
+                        razaoSocial: "",
+                        nomeCompleto: "",
+                        nomeFantasia: "",
+                        cnpj: "",
+                        cpf: "",
+                        enderecoRfb: "",
+                        enderecoTrabalho: "",
+                        advogado: "",
+                        oab: "",
+                        telefone: "",
+                        email: "",
+                        observacoes: ""
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">Pessoa Física (CPF)</span>
+                </label>
+              </div>
+            </div>
+
+            {tipoDocumento === "cnpj" ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2 col-span-2">
+                    <label className="font-semibold text-sm">CNPJ *</label>
+                    <InputMask
+                      mask="99.999.999/9999-99"
                   value={parteForm.cnpj}
                   onChange={e => setParteForm(f => ({ ...f, cnpj: e.target.value }))}
                   onBlur={async e => {
@@ -557,13 +779,157 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               <label className="font-semibold text-sm">Observações</label>
               <Input value={parteForm.observacoes} onChange={e => setParteForm(f => ({ ...f, observacoes: e.target.value }))} multiline={"true"} />
             </div>
+              </>
+            ) : (
+              <>
+                {/* Formulário para CPF */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2 col-span-2">
+                    <label className="font-semibold text-sm">CPF *</label>
+                    <InputMask
+                      mask="999.999.999-99"
+                      value={parteForm.cpf}
+                      onChange={e => setParteForm(f => ({ ...f, cpf: e.target.value }))}
+                      onBlur={async e => {
+                        const cpf = e.target.value;
+                        console.log('DEBUG onBlur CPF:', cpf);
+                        if (cpf.replace(/\D/g,"").length === 11) {
+                          try {
+                            // Primeiro busca no Supabase
+                            let pessoaFisica = await buscarPessoaFisicaSupabase(cpf);
+                            console.log('DEBUG buscarPessoaFisicaSupabase:', pessoaFisica);
+                            
+                            if (!pessoaFisica) {
+                              // Se não encontrou no Supabase, busca no CPFHub
+                              const dadosCpf = await buscarCPF(cpf);
+                              console.log('DEBUG buscarCPF (CPFHub):', dadosCpf);
+                              
+                              if (dadosCpf) {
+                                const enderecoCompleto = dadosCpf.endereco ? 
+                                  `${dadosCpf.endereco.logradouro}, ${dadosCpf.endereco.numero} - ${dadosCpf.endereco.bairro}, ${dadosCpf.endereco.cidade}/${dadosCpf.endereco.uf}` : '';
+                                
+                                const mapped = {
+                                  tipo: "cpf",
+                                  nomeCompleto: dadosCpf.nome_completo || "",
+                                  cpf: dadosCpf.cpf || cpf,
+                                  enderecoRfb: enderecoCompleto,
+                                  enderecoTrabalho: "",
+                                  advogado: "",
+                                  oab: "",
+                                  telefone: dadosCpf.telefones && dadosCpf.telefones.length > 0 ? dadosCpf.telefones[0] : "",
+                                  email: dadosCpf.emails && dadosCpf.emails.length > 0 ? dadosCpf.emails[0] : "",
+                                  observacoes: dadosCpf.mae ? `Mãe: ${dadosCpf.mae}` : ""
+                                };
+                                console.log('DEBUG onBlur mapped form (CPFHub):', mapped);
+                                setParteForm(mapped);
+                                
+                                // Cadastra no Supabase para futuras consultas
+                                try {
+                                  await cadastrarPessoaFisicaSupabase({
+                                    cpf: mapped.cpf,
+                                    nome_completo: mapped.nomeCompleto,
+                                    endereco_rfb: mapped.enderecoRfb,
+                                    endereco_trabalho: mapped.enderecoTrabalho,
+                                    advogado: mapped.advogado,
+                                    oab: mapped.oab,
+                                    telefone: mapped.telefone,
+                                    email: mapped.email,
+                                    observacoes: mapped.observacoes
+                                  });
+                                } catch (err) {
+                                  console.warn('DEBUG cadastrarPessoaFisicaSupabase erro (não fatal):', err.message || err);
+                                }
+                              }
+                            } else {
+                              // Encontrou no Supabase, usa os dados salvos
+                              const mapped = {
+                                tipo: "cpf",
+                                nomeCompleto: pessoaFisica.nome_completo || "",
+                                cpf: pessoaFisica.cpf || cpf,
+                                enderecoRfb: pessoaFisica.endereco_rfb || "",
+                                enderecoTrabalho: pessoaFisica.endereco_trabalho || "",
+                                advogado: pessoaFisica.advogado || "",
+                                oab: pessoaFisica.oab || "",
+                                telefone: pessoaFisica.telefone || "",
+                                email: pessoaFisica.email || "",
+                                observacoes: pessoaFisica.observacoes || ""
+                              };
+                              console.log('DEBUG onBlur mapped form (Supabase):', mapped);
+                              setParteForm(mapped);
+                            }
+                          } catch (err) {
+                            console.warn('DEBUG buscarCPF erro:', err.message || err);
+                          }
+                        } else {
+                          console.log('DEBUG CPF inválido para busca:', cpf);
+                        }
+                      }}
+                      className="input input-bordered w-full"
+                      placeholder="000.000.000-00"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2 col-span-2">
+                    <label className="font-semibold text-sm">Nome Completo *</label>
+                    <Input required value={parteForm.nomeCompleto} onChange={e => setParteForm(f => ({ ...f, nomeCompleto: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">Endereço</label>
+                    <Input value={parteForm.enderecoRfb} onChange={e => setParteForm(f => ({ ...f, enderecoRfb: e.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">Endereço (Posto de Trabalho)</label>
+                    <Input value={parteForm.enderecoTrabalho} onChange={e => setParteForm(f => ({ ...f, enderecoTrabalho: e.target.value }))} />
+                  </div>
+                </div>
+                <hr className="my-4" />
+                <h3 className="font-semibold text-lg mb-2">Informações do Patrono</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">Nome do Advogado</label>
+                    <Input value={parteForm.advogado} onChange={e => setParteForm(f => ({ ...f, advogado: e.target.value }))} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">OAB</label>
+                    <Input value={parteForm.oab} onChange={e => setParteForm(f => ({ ...f, oab: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">Telefone</label>
+                    <InputMask
+                      mask="(99) 99999-9999"
+                      value={parteForm.telefone}
+                      onChange={e => setParteForm(f => ({ ...f, telefone: e.target.value }))}
+                      placeholder="(DDD) 00000-0000"
+                      className="input input-bordered w-full"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-sm">Email</label>
+                    <Input value={parteForm.email} onChange={e => setParteForm(f => ({ ...f, email: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="font-semibold text-sm">Observações</label>
+                  <Input value={parteForm.observacoes} onChange={e => setParteForm(f => ({ ...f, observacoes: e.target.value }))} multiline={"true"} />
+                </div>
+              </>
+            )}
+            
             <div className="flex gap-2 mb-8">
               <Button type="button" variant="outline" onClick={() => {
                 setPartesContrarias(prev => [...prev, parteForm]);
                 setParteForm({
+                  tipo: tipoDocumento,
                   razaoSocial: "",
+                  nomeCompleto: "",
                   nomeFantasia: "",
                   cnpj: "",
+                  cpf: "",
                   enderecoRfb: "",
                   enderecoTrabalho: "",
                   advogado: "",
@@ -575,9 +941,12 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
               }}>Adicionar esta Parte</Button>
               {partesContrarias.length > 0 && (
                 <Button type="button" variant="ghost" onClick={() => setParteForm({
+                  tipo: tipoDocumento,
                   razaoSocial: "",
+                  nomeCompleto: "",
                   nomeFantasia: "",
                   cnpj: "",
+                  cpf: "",
                   enderecoRfb: "",
                   enderecoTrabalho: "",
                   advogado: "",
@@ -588,10 +957,12 @@ function NewProcessModal({ isOpen, onClose, onSave, process, isEdit, loading }) 
                 })}>Adicionar mais partes contrárias ao processo</Button>
               )}
             </div>
-            <div className="flex justify-between items-center mt-8 gap-2">
-              <Button type="button" variant="secondary" onClick={() => setStep(1)}>Voltar</Button>
-              <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-              <Button type="button" className="bg-blue-600 text-white" onClick={handleSave}>Salvar</Button>
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 mt-6 sm:mt-8">
+              <Button type="button" variant="secondary" onClick={() => setStep(1)} className="w-full sm:w-auto">Voltar</Button>
+              <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto">
+                <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancelar</Button>
+                <Button type="button" className="bg-blue-600 text-white w-full sm:w-auto" onClick={handleSave}>Salvar</Button>
+              </div>
             </div>
           </form>
         )}

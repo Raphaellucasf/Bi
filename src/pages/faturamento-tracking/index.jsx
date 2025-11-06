@@ -5,16 +5,20 @@ import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import FaturamentoSummaryCards from './components/FaturamentoSummaryCards';
+import AcoesPendentes from './components/AcoesPendentes';
 import ParcelasManager from './components/ParcelasManager';
-import RecentTransactions from './components/RecentTransactions';
+import FluxoCaixa from './components/FluxoCaixa';
+import PrevisaoFutura from './components/PrevisaoFutura';
 import ExportReportModal from './components/ExportReportModal';
 import FaturamentoWizardModal from './components/FaturamentoWizardModal';
+import GastoModal from './components/GastoModal';
 import { generateFaturamentoReport } from '../../services/reportService';
 
 const FaturamentoTracking = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isFaturamentoModalOpen, setIsFaturamentoModalOpen] = useState(false);
+  const [isGastoModalOpen, setIsGastoModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleExportReport = async (config) => {
@@ -46,6 +50,13 @@ const FaturamentoTracking = () => {
             </div>
             <div className="flex gap-3">
               <Button
+                onClick={() => setIsGastoModalOpen(true)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Icon name="TrendingDown" size={18} className="mr-2" />
+                Registrar Novo Gasto
+              </Button>
+              <Button
                 onClick={() => setIsExportModalOpen(true)}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
@@ -65,14 +76,23 @@ const FaturamentoTracking = () => {
           {/* Cards de resumo de faturamento */}
           <FaturamentoSummaryCards refreshKey={refreshKey} />
 
+          {/* Ações Pendentes */}
+          <AcoesPendentes 
+            refreshKey={refreshKey} 
+            onUpdated={() => setRefreshKey((k) => k + 1)} 
+          />
+
           {/* Gerenciador de parcelas */}
           <ParcelasManager
             refreshKey={refreshKey}
             onUpdated={() => setRefreshKey((k) => k + 1)}
           />
 
-          {/* Transações recentes */}
-          <RecentTransactions refreshKey={refreshKey} />
+          {/* Fluxo de Caixa Unificado */}
+          <FluxoCaixa refreshKey={refreshKey} />
+
+          {/* Previsão Futura */}
+          <PrevisaoFutura refreshKey={refreshKey} />
         </div>
       </main>
 
@@ -87,6 +107,13 @@ const FaturamentoTracking = () => {
       <FaturamentoWizardModal
         isOpen={isFaturamentoModalOpen}
         onClose={() => setIsFaturamentoModalOpen(false)}
+        onSuccess={handleFaturamentoSuccess}
+      />
+
+      {/* Modal de novo gasto */}
+      <GastoModal
+        isOpen={isGastoModalOpen}
+        onClose={() => setIsGastoModalOpen(false)}
         onSuccess={handleFaturamentoSuccess}
       />
     </div>

@@ -1,30 +1,44 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense, lazy } from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, useLocation } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import NotFound from "pages/NotFound";
 
-import Dashboard from './pages/dashboard';
-import Settings from './pages/settings';
-import Support from './pages/support';
-import DocumentManagement from './pages/document-management';
-import UserProfileSettings from './pages/user-profile-settings';
-import ProcessManagement from './pages/process-management';
-import FaturamentoTracking from './pages/faturamento-tracking';
-import ClientManagement from './pages/client-management';
-import Tasks from './pages/tasks';
-import Audiencias from './pages/tasks/audiencias';
-import Prazos from './pages/tasks/prazos';
-import Reunioes from './pages/tasks/reunioes';
-import Publications from './pages/publications';
-import CalendarPage from './pages/calendar';
-import ClientPortal from './pages/client-portal';
+// Lazy loading de páginas para melhor performance
+const Dashboard = lazy(() => import('./pages/dashboard'));
+const Settings = lazy(() => import('./pages/settings'));
+const Support = lazy(() => import('./pages/support'));
+const DocumentManagement = lazy(() => import('./pages/document-management'));
+const UserProfileSettings = lazy(() => import('./pages/user-profile-settings'));
+const ProcessManagement = lazy(() => import('./pages/process-management'));
+const FaturamentoTracking = lazy(() => import('./pages/faturamento-tracking'));
+const ClientManagement = lazy(() => import('./pages/client-management'));
+const Tasks = lazy(() => import('./pages/tasks'));
+const Audiencias = lazy(() => import('./pages/tasks/audiencias'));
+const Prazos = lazy(() => import('./pages/tasks/prazos'));
+const Reunioes = lazy(() => import('./pages/tasks/reunioes'));
+const Publications = lazy(() => import('./pages/publications'));
+const CalendarPage = lazy(() => import('./pages/calendar'));
+const ClientPortal = lazy(() => import('./pages/client-portal'));
+const Detetive = lazy(() => import('./pages/detetive'));
+const Monitoring = lazy(() => import('./pages/monitoring'));
+
+// Páginas de login carregadas imediatamente (critical path)
 import LoginPage from './pages/login/LoginPage';
 import RegisterPage from './pages/login/Register';
+
 import { supabase } from './services/supabaseClient';
 import SelectEscritorioModal from './components/ui/SelectEscritorioModal';
-import Detetive from './pages/detetive';
-import Monitoring from './pages/monitoring';
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen bg-[#f7f8fa]">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p className="text-gray-600">Carregando...</p>
+    </div>
+  </div>
+);
 
 
 
@@ -90,33 +104,35 @@ const Routes = () => {
     <BrowserRouter>
       <ErrorBoundary>
         <ScrollToTop />
-        <RouterRoutes>
-          {/* Authentication */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/login/register" element={<RegisterPage />} />
-          {/* Redirect root to process-management */}
-          <Route path="/" element={<Navigate to="/process-management" replace />} />
-          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/process-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
-          <Route path="/client-management" element={<RequireAuth><ClientManagement /></RequireAuth>} />
-          <Route path="/tasks" element={<RequireAuth><Tasks /></RequireAuth>} />
-          <Route path="/tasks/audiencias" element={<RequireAuth><Audiencias /></RequireAuth>} />
-          <Route path="/tasks/prazos" element={<RequireAuth><Prazos /></RequireAuth>} />
-          <Route path="/tasks/reunioes" element={<RequireAuth><Reunioes /></RequireAuth>} />
-          <Route path="/document-management" element={<RequireAuth><DocumentManagement /></RequireAuth>} />
-          <Route path="/publications" element={<RequireAuth><Publications /></RequireAuth>} />
-          <Route path="/faturamento-tracking" element={<RequireAuth><FaturamentoTracking /></RequireAuth>} />
-          <Route path="/client-portal" element={<RequireAuth><ClientPortal /></RequireAuth>} />
-          <Route path="/user-profile-settings" element={<RequireAuth><UserProfileSettings /></RequireAuth>} />
-          <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
-          <Route path="/detetive" element={<RequireAuth><Detetive /></RequireAuth>} />
-          <Route path="/monitoring" element={<RequireAuth><Monitoring /></RequireAuth>} />
-          <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
-          <Route path="/support" element={<RequireAuth><Support /></RequireAuth>} />
-          {/* Legacy route redirect */}
-          <Route path="/case-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
-          <Route path="*" element={<NotFound />} />
-        </RouterRoutes>
+        <Suspense fallback={<PageLoader />}>
+          <RouterRoutes>
+            {/* Authentication */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/login/register" element={<RegisterPage />} />
+            {/* Redirect root to process-management */}
+            <Route path="/" element={<Navigate to="/process-management" replace />} />
+            <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+            <Route path="/process-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
+            <Route path="/client-management" element={<RequireAuth><ClientManagement /></RequireAuth>} />
+            <Route path="/tasks" element={<RequireAuth><Tasks /></RequireAuth>} />
+            <Route path="/tasks/audiencias" element={<RequireAuth><Audiencias /></RequireAuth>} />
+            <Route path="/tasks/prazos" element={<RequireAuth><Prazos /></RequireAuth>} />
+            <Route path="/tasks/reunioes" element={<RequireAuth><Reunioes /></RequireAuth>} />
+            <Route path="/document-management" element={<RequireAuth><DocumentManagement /></RequireAuth>} />
+            <Route path="/publications" element={<RequireAuth><Publications /></RequireAuth>} />
+            <Route path="/faturamento-tracking" element={<RequireAuth><FaturamentoTracking /></RequireAuth>} />
+            <Route path="/client-portal" element={<RequireAuth><ClientPortal /></RequireAuth>} />
+            <Route path="/user-profile-settings" element={<RequireAuth><UserProfileSettings /></RequireAuth>} />
+            <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
+            <Route path="/detetive" element={<RequireAuth><Detetive /></RequireAuth>} />
+            <Route path="/monitoring" element={<RequireAuth><Monitoring /></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+            <Route path="/support" element={<RequireAuth><Support /></RequireAuth>} />
+            {/* Legacy route redirect */}
+            <Route path="/case-management" element={<RequireAuth><ProcessManagement /></RequireAuth>} />
+            <Route path="*" element={<NotFound />} />
+          </RouterRoutes>
+        </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   );

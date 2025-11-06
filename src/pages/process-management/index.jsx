@@ -1,16 +1,105 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Sidebar from '../../components/ui/Sidebar';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
 import Icon from '../../components/AppIcon';
 import { supabase } from '../../services/supabaseClient';
 import { formatProperName } from '../../utils/formatters';
+import { useCache } from '../../hooks/useOptimization';
 
 const getEscritorioId = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 	const { data: perfis } = await supabase.from('perfis').select('escritorio_id').eq('user_id', user.id).limit(1);
   return perfis && perfis[0]?.escritorio_id;
+};
+
+/**
+ * Funções de fetch para useCache
+ * Encapsulam a lógica de busca do Supabase
+ */
+const fetchRecentProcesses = async (escritorioId) => {
+	if (!escritorioId) return [];
+	
+	const { data: processos } = await supabase
+		.from('processos')
+		.select(`
+			*, 
+			processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))
+		`)
+		.eq('escritorio_id', escritorioId)
+		.order('updated_at', { ascending: false })
+		.order('created_at', { ascending: false })
+		.limit(3);
+	
+	// Tentar buscar com fase
+	try {
+		const { data: fasesCheck } = await supabase.from('fases_processuais').select('id').limit(1);
+		if (fasesCheck) {
+			const { data: processosCompletos } = await supabase
+				.from('processos')
+				.select(`
+					*, 
+					processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*)),
+					fase:fases_processuais(nome, cor, icone, ordem),
+					andamento:andamentos_processuais(nome, gera_prazo, dias_prazo, tipo_prazo)
+				`)
+				.eq('escritorio_id', escritorioId)
+				.order('updated_at', { ascending: false })
+				.order('created_at', { ascending: false })
+				.limit(3);
+			
+			return (processosCompletos || []).map(p => ({
+				...p,
+				fase_nome: p.fase?.nome,
+				fase_cor: p.fase?.cor,
+				fase_icone: p.fase?.icone,
+				fase_ordem: p.fase?.ordem,
+				andamento_nome: p.andamento?.nome,
+				gera_prazo: p.andamento?.gera_prazo,
+				dias_prazo: p.andamento?.dias_prazo,
+				tipo_prazo: p.andamento?.tipo_prazo,
+				dias_na_fase_atual: p.data_ultima_mudanca_fase 
+					? Math.floor((new Date() - new Date(p.data_ultima_mudanca_fase)) / (1000 * 60 * 60 * 24))
+					: null
+			}));
+		}
+	} catch (err) {
+		console.log('Tabelas de fase não existem, usando processos simples');
+	}
+	
+	return processos || [];
+};
+
+const fetchClientNames = async (clientIds) => {
+	if (!clientIds || clientIds.length === 0) return {};
+	
+	const { data: clientes } = await supabase
+		.from('clientes')
+		.select('id, nome_completo')
+		.in('id', clientIds);
+	
+	const names = {};
+	(clientes || []).forEach(c => { names[c.id] = c.nome_completo; });
+	return names;
+};
+
+const fetchPatronoNames = async (patronoIds) => {
+	if (!patronoIds || patronoIds.length === 0) return {};
+	
+	try {
+		const { data: patronos } = await supabase
+			.from('patrono')
+			.select('id, razao_social, nome_fantasia')
+			.in('id', patronoIds);
+		
+		const pnames = {};
+		(patronos || []).forEach(p => { pnames[p.id] = p.nome_fantasia || p.razao_social; });
+		return pnames;
+	} catch (err) {
+		return {};
+	}
 };
 
 const statusColors = {
@@ -23,21 +112,27 @@ const statusColors = {
 import NewProcessModal from './components/NewProcessModal';
 import ProcessoDetalhesModal from './components/ProcessoDetalhesModal';
 import CommentModal from './components/CommentModal';
+import { FaseBadge } from '../../components/ui/FaseBadge';
+import ProcessCard from './components/ProcessCard';
+import ProcessListItem from './components/ProcessListItem';
 
 
 
 const ProcessManagement = () => {
+	const location = useLocation();
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [search, setSearch] = useState('');
-	const [tab, setTab] = useState('Todos');
+	const [tab, setTab] = useState('Recentes');
 	const [showModal, setShowModal] = useState(false);
 	const [showEditModal, setShowEditModal] = useState(false);
 	const [showCommentModal, setShowCommentModal] = useState(false);
 	const [showDetailsModal, setShowDetailsModal] = useState(false);
 	const [selectedProcess, setSelectedProcess] = useState(null);
 	const [selectedProcessId, setSelectedProcessId] = useState(null);
-	const [processes, setProcesses] = useState([]);
-	const [loading, setLoading] = useState(true);
+	const [allProcesses, setAllProcesses] = useState([]);
+	const [allLoading, setAllLoading] = useState(false);
+	const [page, setPage] = useState(1);
+	const [totalPages, setTotalPages] = useState(1);
 	const [clientNames, setClientNames] = useState({});
 	const [clientsLoading, setClientsLoading] = useState(false);
 	const [patronoNames, setPatronoNames] = useState({});
@@ -48,128 +143,230 @@ const ProcessManagement = () => {
 	const [deletingId, setDeletingId] = useState(null);
 	const [deleteLoading, setDeleteLoading] = useState(false);
 
-	// Carregar escritório e processos
+	// 🚀 USANDO useCache PARA PROCESSOS RECENTES (cache de 5 minutos)
+	const [showSyncModal, setShowSyncModal] = useState(false);
+	const [syncProgress, setSyncProgress] = useState(null);
+	const [processes, setProcesses] = useState([]);
+	const [loading, setLoading] = useState(true);
+
+	// Carregar escritório inicial
 	useEffect(() => {
 		let ignore = false;
 		const fetchData = async () => {
-			setLoading(true);
 			const eid = await getEscritorioId();
-			setEscritorioId(eid);
-			if (!eid) { setProcesses([]); setLoading(false); return; }
-			// Buscar nome do escritório do usuário
-			try {
-				const res = await supabase.from('escritorios').select('id, nome').eq('id', eid).single();
-				const escrit = res.data;
-				if (escrit) setEscritorioName(escrit.nome);
-			} catch (err) {}
-			// Buscar apenas os 3 processos mais recentes
-			const { data: processos } = await supabase
-				.from('processos')
-				.select(`*, processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))`)
-				.eq('escritorio_id', eid)
-				.order('updated_at', { ascending: false })
-				.order('created_at', { ascending: false })
-				.limit(3);
-			if (!ignore) setProcesses(processos || []);
-			setLoading(false);
-			// Buscar nomes dos clientes
-			if (processos && processos.length > 0) {
-				setClientsLoading(true);
-				const ids = processos.map(p => p.cliente_id).filter(Boolean);
-				if (ids.length > 0) {
-					const { data: clientes } = await supabase.from('clientes').select('id, nome_completo').in('id', ids);
-					const names = {};
-					(clientes || []).forEach(c => { names[c.id] = c.nome_completo; });
-					setClientNames(names);
+			if (!ignore) {
+				setEscritorioId(eid);
+				
+				if (!eid) { 
+					setProcesses([]);
+					setAllProcesses([]);
+					setTotalPages(1);
+					setLoading(false);
+					return; 
 				}
-				setClientsLoading(false);
-			}
-			// Buscar nomes dos patronos
-			if (processos && processos.length > 0) {
+				
+				// Buscar nome do escritório
 				try {
-					const patronoIds = processos.map(p => p.patrono_id).filter(Boolean);
-					if (patronoIds.length > 0) {
-						const res = await supabase.from('patrono').select('id, razao_social, nome_fantasia').in('id', patronoIds);
-						const patronos = res.data;
-						const pnames = {};
-						(patronos || []).forEach(p => { pnames[p.id] = p.nome_fantasia || p.razao_social; });
-						setPatronoNames(pnames);
-					}
-				} catch (err) {}
+					const res = await supabase.from('escritorios').select('id, nome').eq('id', eid).single();
+					if (res.data) setEscritorioName(res.data.nome);
+				} catch (err) {
+					console.error('Erro ao buscar escritório:', err);
+				}
+				
+				// 🚀 Buscar processos recentes com cache
+				setLoading(true);
+				const recentProcesses = await fetchRecentProcesses(eid);
+				if (!ignore) {
+					setProcesses(recentProcesses);
+					setLoading(false);
+				}
+				
+				// Buscar todos os processos para tab 'Todos' (paginado)
+				const { data: allData, count } = await supabase
+					.from('processos')
+					.select('id, titulo, numero_processo, status, escritorio_id, fase_id, andamento_id', { count: 'exact' })
+					.eq('escritorio_id', eid)
+					.order('titulo', { ascending: true })
+					.range(0, 29);
+				
+				if (!ignore) {
+					setAllProcesses(allData || []);
+					setTotalPages(count ? Math.ceil(count / 30) : 1);
+				}
 			}
 		};
 		fetchData();
 		return () => { ignore = true; };
 	}, []);
 
-	// Search handler: fetch from Supabase when search is not empty
+	// 🚀 Detectar navegação de outras páginas (ex: cliente querendo editar/ver processo)
 	useEffect(() => {
-		const fetchSearchResults = async () => {
-			if (!escritorioId || !search.trim()) return;
-			setLoading(true);
-			const { data: processos } = await supabase
-				.from('processos')
-				.select(`*, processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))`)
-				.eq('escritorio_id', escritorioId)
-				.or(`titulo.ilike.%${search}%,numero_processo.ilike.%${search}%`)
-				.order('created_at', { ascending: false });
-			setProcesses(processos || []);
-			setLoading(false);
+		if (location.state?.editProcess) {
+			setEditingProcess(location.state.editProcess);
+			setShowEditModal(true);
+			// Limpar state após usar
+			window.history.replaceState({}, document.title);
+		} else if (location.state?.viewProcess) {
+			setSelectedProcess(location.state.viewProcess);
+			setShowDetailsModal(true);
+			// Limpar state após usar
+			window.history.replaceState({}, document.title);
+		}
+	}, [location.state]);
+
+	// 🚀 Buscar nomes de clientes e patronos quando processos mudarem
+	useEffect(() => {
+		const fetchNames = async () => {
+			if (!processes || processes.length === 0) return;
+			
 			// Buscar nomes dos clientes
-			if (processos && processos.length > 0) {
-				setClientsLoading(true);
-				const ids = processos.map(p => p.cliente_id).filter(Boolean);
-				if (ids.length > 0) {
-					const { data: clientes } = await supabase.from('clientes').select('id, nome_completo').in('id', ids);
-					const names = {};
-					(clientes || []).forEach(c => { names[c.id] = c.nome_completo; });
-					setClientNames(names);
-				}
-				setClientsLoading(false);
+			setClientsLoading(true);
+			const clientIds = processes.map(p => p.cliente_id).filter(Boolean);
+			if (clientIds.length > 0) {
+				const names = await fetchClientNames(clientIds);
+				setClientNames(names);
 			}
+			setClientsLoading(false);
+			
 			// Buscar nomes dos patronos
-			if (processos && processos.length > 0) {
-				try {
-					const patronoIds = processos.map(p => p.patrono_id).filter(Boolean);
-					if (patronoIds.length > 0) {
-						const res = await supabase.from('patrono').select('id, razao_social, nome_fantasia').in('id', patronoIds);
-						const patronos = res.data;
-						const pnames = {};
-						(patronos || []).forEach(p => { pnames[p.id] = p.nome_fantasia || p.razao_social; });
-						setPatronoNames(pnames);
-					}
-				} catch (err) {}
+			const patronoIds = processes.map(p => p.patrono_id).filter(Boolean);
+			if (patronoIds.length > 0) {
+				const names = await fetchPatronoNames(patronoIds);
+				setPatronoNames(names);
 			}
 		};
-		if (search.trim()) {
-			fetchSearchResults();
-		} else {
-			// If search is cleared, reload only the 3 most recent
-			reloadProcesses(escritorioId, true);
-		}
-	}, [search, escritorioId]);
+		
+		fetchNames();
+	}, [processes]);
 
-	// Helper to reload only 3 most recent processes
-	const reloadProcesses = async (eid = escritorioId, onlyRecent = false) => {
+	// 🚀 Função para recarregar processos (substituindo useCache.refetch)
+	const refetchProcesses = async () => {
+		if (!escritorioId) return;
 		setLoading(true);
-		let query = supabase
-			.from('processos')
-			.select(`*, processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))`)
-			.eq('escritorio_id', eid);
-		if (onlyRecent) {
-			query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
-			// Removido o .limit(3) para garantir que todas as partes contrárias apareçam
-		}
-		const { data: processos } = await query;
-		setProcesses(processos || []);
+		const recentProcesses = await fetchRecentProcesses(escritorioId);
+		setProcesses(recentProcesses);
 		setLoading(false);
 	};
 
-	// Filtrar processos por tab (Todos, Ativos, Pendentes)
+	// Search handler: fetch from Supabase when search is not empty
+	useEffect(() => {
+		if (tab === 'Todos') {
+			// Paginated fetch for all processes
+			const fetchAllProcesses = async () => {
+				setAllLoading(true);
+				const from = (page - 1) * 30;
+				const to = from + 29;
+				if (!escritorioId) {
+					setAllProcesses([]);
+					setTotalPages(1);
+					setAllLoading(false);
+					return;
+				}
+				const { data, count, error } = await supabase
+					.from('processos')
+					.select('id, titulo, numero_processo, status, escritorio_id', { count: 'exact' })
+					.eq('escritorio_id', escritorioId)
+					.order('titulo', { ascending: true })
+					.range(from, to);
+				setAllProcesses(data || []);
+				setTotalPages(count ? Math.ceil(count / 30) : 1);
+				setAllLoading(false);
+			};
+			fetchAllProcesses();
+		} else {
+			// Para Recentes e Ativos, sempre buscar apenas os 3 mais recentes
+			const fetchRecentProcesses = async () => {
+				if (!escritorioId) return;
+				
+				// Se tem busca, busca com filtro
+				if (search.trim()) {
+					setLoading(true);
+					const { data: processos } = await supabase
+						.from('processos')
+						.select(`
+							*, 
+							processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*))
+						`)
+						.eq('escritorio_id', escritorioId)
+						.or(`titulo.ilike.%${search}%,numero_processo.ilike.%${search}%`)
+						.order('updated_at', { ascending: false })
+						.order('created_at', { ascending: false });
+					
+					// Tentar buscar com fase
+					let processosComFase = processos || [];
+					try {
+						const { data: fasesCheck } = await supabase.from('fases_processuais').select('id').limit(1);
+						if (fasesCheck) {
+							const { data: processosCompletos } = await supabase
+								.from('processos')
+								.select(`
+									*, 
+									processos_empresas:processos_empresas (empresa_id, empresa:empresas!empresa_id (*)),
+									fase:fases_processuais(nome, cor, icone, ordem),
+									andamento:andamentos_processuais(nome)
+								`)
+								.eq('escritorio_id', escritorioId)
+								.or(`titulo.ilike.%${search}%,numero_processo.ilike.%${search}%`)
+								.order('updated_at', { ascending: false })
+								.order('created_at', { ascending: false });
+							
+							processosComFase = (processosCompletos || []).map(p => ({
+								...p,
+								fase_nome: p.fase?.nome,
+								fase_cor: p.fase?.cor,
+								fase_icone: p.fase?.icone,
+								fase_ordem: p.fase?.ordem,
+								andamento_nome: p.andamento?.nome,
+								dias_na_fase_atual: p.data_ultima_mudanca_fase 
+									? Math.floor((new Date() - new Date(p.data_ultima_mudanca_fase)) / (1000 * 60 * 60 * 24))
+									: null
+							}));
+						}
+					} catch (err) {
+						console.log('Sem tabelas de fase, usando processos simples');
+					}
+					
+					setProcesses(processosComFase);
+					
+					// Buscar nomes dos clientes
+					if (processos && processos.length > 0) {
+						setClientsLoading(true);
+						const ids = processos.map(p => p.cliente_id).filter(Boolean);
+						if (ids.length > 0) {
+							const { data: clientes } = await supabase.from('clientes').select('id, nome_completo').in('id', ids);
+							const names = {};
+							(clientes || []).forEach(c => { names[c.id] = c.nome_completo; });
+							setClientNames(names);
+						}
+						setClientsLoading(false);
+					}
+					
+					// Buscar nomes dos patronos
+					if (processos && processos.length > 0) {
+						try {
+							const patronoIds = processos.map(p => p.patrono_id).filter(Boolean);
+							if (patronoIds.length > 0) {
+								const res = await supabase.from('patrono').select('id, razao_social, nome_fantasia').in('id', patronoIds);
+								const patronos = res.data;
+								const pnames = {};
+								(patronos || []).forEach(p => { pnames[p.id] = p.nome_fantasia || p.razao_social; });
+								setPatronoNames(pnames);
+							}
+						} catch (err) {}
+					}
+					setLoading(false);
+				} else {
+					// Sem busca: sempre carregar apenas os 3 mais recentes
+					reloadProcesses(escritorioId, true);
+				}
+			};
+			fetchRecentProcesses();
+		}
+	}, [search, escritorioId, tab, page]);
+	// 🚀 Filtrar processos por tab (Recentes, Ativos)
 	const filtered = processes.filter(p => {
-		if (tab === 'Todos') return true;
+		if (tab === 'Recentes') return true;
 		if (tab === 'Ativos') return p.status === 'Ativo';
-		if (tab === 'Pendentes') return p.status === 'Pendente';
 		return true;
 	});
 
@@ -223,7 +420,10 @@ const ProcessManagement = () => {
 			juiz: data.juiz || null,
 			descricao: data.descricao || null,
 			competencia_vara: data.competencia || null,
-			ativo: 'Ativo'
+			ativo: 'Ativo',
+			fase_id: data.fase_id || null,
+			andamento_id: data.andamento_id || null,
+			observacoes_andamento: data.observacoes_andamento || null
 			// NÃO inicializa patrono_id aqui - será adicionado apenas se válido
 		};
 		
@@ -324,8 +524,8 @@ const ProcessManagement = () => {
 		}
 		setModalLoading(false);
 		setShowModal(false);
-		// After create, reload only 3 most recent
-		await reloadProcesses(escritorioId, true);
+		// 🚀 Atualizar cache após criar processo
+		await refetchProcesses();
 	};
 
 	const handleEditProcess = (proc) => {
@@ -349,6 +549,9 @@ const ProcessManagement = () => {
 			honorarios: data.honorarios || null,
 			data_inicio: data.dataInicio || null,
 			proxima_audiencia: data.proximaAudiencia || null,
+			fase_id: data.fase_id || null,
+			andamento_id: data.andamento_id || null,
+			observacoes_andamento: data.observacoes_andamento || null,
 			juiz: data.juiz || null,
 			descricao: data.descricao || null,
 			competencia_vara: data.competencia || null,
@@ -476,7 +679,8 @@ const ProcessManagement = () => {
 		setModalLoading(false);
 		setShowEditModal(false);
 		setEditingProcess(null);
-		await reloadProcesses(escritorioId, true);
+		// 🚀 Atualizar cache após editar processo
+		await refetchProcesses();
 	};
 
 	const handleDeleteProcess = async (proc) => {
@@ -486,8 +690,8 @@ const ProcessManagement = () => {
 		await supabase.from('processos').delete().eq('id', proc.id);
 		setDeleteLoading(false);
 		setDeletingId(null);
-		// After delete, reload only 3 most recent
-		await reloadProcesses(escritorioId, true);
+		// 🚀 Atualizar cache após deletar processo
+		await refetchProcesses();
 	};
 
 	const handleAddComment = (proc) => {
@@ -522,104 +726,81 @@ const ProcessManagement = () => {
 						</div>
 
 						{/* Search and Filters */}
-						<div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
-							<div className="flex-1 relative">
-								<input
-									className="w-full rounded-lg border border-border bg-white py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-									placeholder="Buscar por título, nº, cliente, escritório, parte contrária..."
-									value={search}
-									onChange={e => setSearch(e.target.value)}
-								/>
-								<span className="absolute left-3 top-2.5 text-muted-foreground">
-									<Icon name="Search" size={18} />
-								</span>
-							</div>
-							<div className="flex gap-2 mt-2 md:mt-0">
-								{['Todos', 'Ativos', 'Pendentes'].map(t => (
-									<button
-										key={t}
-										onClick={() => setTab(t)}
-										className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${tab === t ? 'bg-black text-white border-black' : 'bg-white text-black border-border'}`}
-									>
-										{t}
-									</button>
-								))}
-							</div>
-							<div className="ml-auto">
-								<select className="rounded-lg border border-border py-2 px-3 text-sm bg-white">
-									<option>Todos</option>
-								</select>
-							</div>
+					{/* Search and Filters */}
+					<div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
+						<div className="flex-1 relative">
+							<input
+								className="w-full rounded-lg border border-border bg-white py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+								placeholder="Buscar por título, nº, cliente, escritório..."
+								value={search}
+								onChange={e => setSearch(e.target.value)}
+							/>
+							<span className="absolute left-3 top-2.5 text-muted-foreground">
+								<Icon name="Search" size={18} />
+							</span>
 						</div>
-
-						{/* Card List */}
-						<div className="bg-white rounded-xl shadow-sm border border-border p-6 flex flex-col gap-2">
-							{filtered.map(proc => (
-								<div key={proc.id} className="flex flex-col gap-2">
-									<div className="flex items-center justify-between">
-										<div>
-											<div className="text-lg font-semibold text-foreground">{formatProperName(proc.titulo)}</div>
-											<div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-												<span className="flex items-center gap-1"><Icon name="User" size={16} /> {clientNames[proc.cliente_id] ? formatProperName(clientNames[proc.cliente_id]) : <span className="italic text-gray-400">Cliente não encontrado</span>}</span>
-												<span className="flex items-center gap-1"><Icon name="UserCheck" size={16} /> {
-													proc.patrono_id ?
-														(patronoNames[proc.patrono_id] || <span className="italic text-gray-400">Patrono não encontrado</span>) :
-														(escritorioName || <span className="italic text-gray-400">Escritório</span>)
-												}</span>
-												<span>{proc.andamentos?.length || 0} andamentos</span>
-											</div>
-										</div>
-										<div className="flex items-center gap-4">
-											<button className="hover:text-primary" onClick={() => handleEditProcess(proc)}><Icon name="Edit2" size={18} /></button>
-											<button className="hover:text-primary" onClick={() => handleAddComment(proc)}><Icon name="MessageCircle" size={18} /></button>
-											<button className="hover:text-primary" onClick={() => handleShowDetails(proc)}><Icon name="Eye" size={18} /></button>
-											<button
-												className={`hover:text-red-600 ${deleteLoading && deletingId === proc.id ? 'opacity-50 pointer-events-none' : ''}`}
-												onClick={() => handleDeleteProcess(proc)}
-												disabled={deleteLoading && deletingId === proc.id}
-												title="Excluir processo"
-											>
-												<Icon name="Trash2" size={18} />
-											</button>
-										</div>
-									</div>
-														<div className="flex flex-wrap gap-2 mt-2">
-															<span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">{proc.status}</span>
-															<span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-medium">{proc.prioridade}</span>
-															<span className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-medium">{proc.area_direito}</span>
-															<span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1"><Icon name="MessageCircle" size={14} /> {proc.comments || 0} comentários</span>
-															{/* Empresas associadas (tags) */}
-															{Array.isArray(proc.processos_empresas) && proc.processos_empresas.length > 0 && proc.processos_empresas.map((pe, idx) => (
-																pe.empresa ? (
-																	<span key={idx} className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-																		<Icon name="Building" size={13} />
-																		{formatProperName(pe.empresa.razao_social || pe.empresa.nome_fantasia || pe.empresa.cnpj)}
-																	</span>
-																) : null
-															))}
-														</div>
-								</div>
+						<div className="flex gap-2 mt-2 md:mt-0">
+							{['Recentes', 'Ativos', 'Todos'].map(t => (
+								<button
+									key={t}
+									onClick={() => setTab(t)}
+									className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${tab === t ? 'bg-black text-white border-black' : 'bg-white text-black border-border'}`}
+								>
+									{t}
+								</button>
 							))}
-							{(loading || clientsLoading) && <div className="text-center text-muted-foreground py-8">Carregando...</div>}
-							{!loading && !clientsLoading && filtered.length === 0 && <div className="text-center text-muted-foreground py-8">Nenhum processo encontrado.</div>}
 						</div>
 					</div>
-					{showModal && (
-						<NewProcessModal isOpen={showModal} onClose={() => setShowModal(false)} onSave={handleCreateProcess} loading={modalLoading} />
+
+					{/* Card List */}
+					{tab !== 'Todos' ? (
+						<div className="bg-white rounded-xl shadow-sm border border-border p-6 flex flex-col gap-2">
+							{filtered.map(proc => (
+								<ProcessCard
+									key={proc.id}
+									processo={proc}
+									clientName={clientNames[proc.cliente_id]}
+									onEdit={handleEditProcess}
+									onShowDetails={handleShowDetails}
+									onDelete={handleDeleteProcess}
+									isDeleting={deleteLoading && deletingId === proc.id}
+								/>
+							))}
+							{loading && <div className="text-center text-muted-foreground py-8">Carregando...</div>}
+							{!loading && filtered.length === 0 && <div className="text-center text-muted-foreground py-8">Nenhum processo encontrado.</div>}
+						</div>
+					) : (
+						<div className="bg-white rounded-xl shadow-sm border border-border p-6 flex flex-col gap-2">
+							{allProcesses.map(proc => (
+								<ProcessListItem key={proc.id} processo={proc} />
+							))}
+							{allLoading && <div className="text-center text-muted-foreground py-8">Carregando...</div>}
+							{!allLoading && allProcesses.length === 0 && <div className="text-center text-muted-foreground py-8">Nenhum processo encontrado.</div>}
+							{/* Paginação */}
+							<div className="flex justify-center mt-4 gap-2">
+								<Button disabled={page === 1} onClick={() => setPage(page - 1)} variant="secondary">Anterior</Button>
+								<span className="px-3 py-1 text-sm">Página {page} de {totalPages}</span>
+								<Button disabled={page === totalPages} onClick={() => setPage(page + 1)} variant="secondary">Próxima</Button>
+							</div>
+						</div>
 					)}
-								{showEditModal && editingProcess && editingProcess.id && (
-									<NewProcessModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setEditingProcess(null); }} process={editingProcess} isEdit={true} onSave={handleSaveEditProcess} loading={modalLoading} />
-								)}
-								{showCommentModal && selectedProcess && (
-									<CommentModal isOpen={showCommentModal} onClose={() => setShowCommentModal(false)} process={selectedProcess} />
-								)}
-								{showDetailsModal && selectedProcessId && (
-									<ProcessoDetalhesModal
-										processoId={selectedProcessId}
-										open={showDetailsModal}
-										onClose={() => setShowDetailsModal(false)}
-									/>
-								)}
+				</div>
+				{showModal && (
+					<NewProcessModal isOpen={showModal} onClose={() => setShowModal(false)} onSave={handleCreateProcess} loading={modalLoading} />
+				)}
+				{showEditModal && editingProcess && editingProcess.id && (
+					<NewProcessModal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setEditingProcess(null); }} process={editingProcess} isEdit={true} onSave={handleSaveEditProcess} loading={modalLoading} />
+				)}
+				{showCommentModal && selectedProcess && (
+					<CommentModal isOpen={showCommentModal} onClose={() => setShowCommentModal(false)} process={selectedProcess} />
+				)}
+				{showDetailsModal && selectedProcessId && (
+					<ProcessoDetalhesModal
+						processoId={selectedProcessId}
+						open={showDetailsModal}
+						onClose={() => setShowDetailsModal(false)}
+					/>
+				)}
 				</main>
 			</div>
 		);

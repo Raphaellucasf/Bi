@@ -6,6 +6,8 @@ import Header from "../../components/ui/Header";
 import Button from "../../components/ui/Button";
 import Icon from "../../components/AppIcon";
 import { formatProperName } from "../../utils/formatters";
+import { useCache } from "../../hooks/useOptimization";
+import { fetchDashboardStats } from "../../services/optimizedQueries";
 
 const getEscritorioId = async () => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -43,122 +45,26 @@ const Dashboard = () => {
     
     const fetchDashboardData = async () => {
       setLoading(true);
-
-      // 1. Buscar processos ativos (todos exceto Arquivado e Encerrado)
-      const { data: processos, count: processosCount } = await supabase
-        .from('processos')
-        .select('id, titulo, status, valor_causa, area_direito, cliente_principal_id', { count: 'exact' })
-        .eq('escritorio_id', escritorioId)
-        .not('status', 'in', '("Arquivado","Encerrado")');
       
-      setProcessosAtivos(processosCount || 0);
-
-      // 2. Buscar total de clientes
-      const { count: clientesCount } = await supabase
-        .from('clientes')
-        .select('id', { count: 'exact' })
-        .eq('escritorio_id', escritorioId);
-      
-      setTotalClientes(clientesCount || 0);
-
-      // 3. Buscar prazos fatais (próximos 7 dias)
-      const hoje = new Date();
-      const proximosDias = new Date(hoje);
-      proximosDias.setDate(hoje.getDate() + 7);
-      
-      const { count: prazosCount } = await supabase
-        .from('prazos')
-        .select('id', { count: 'exact' })
-        .eq('escritorio_id', escritorioId)
-        .eq('tipo', 'Fatal')
-        .gte('data_vencimento', hoje.toISOString().split('T')[0])
-        .lte('data_vencimento', proximosDias.toISOString().split('T')[0]);
-      
-      setPrazosFatais(prazosCount || 0);
-
-      // 4. Calcular valor total dos processos
-      const valorTotalProcessos = (processos || []).reduce((sum, proc) => sum + (parseFloat(proc.valor_causa) || 0), 0);
-      setValorTotal(valorTotalProcessos);
-
-      // 5. Buscar processos recentes (últimos 2 atualizados pelo usuário)
-      const { data: recentes } = await supabase
-        .from('processos')
-        .select('id, titulo, status, prioridade, area_direito, cliente_principal_id, updated_at')
-        .eq('escritorio_id', escritorioId)
-        .order('updated_at', { ascending: false })
-        .limit(2);
-
-      // Buscar nomes dos clientes
-      if (recentes && recentes.length > 0) {
-        const clienteIds = recentes.map(p => p.cliente_principal_id).filter(Boolean);
-        const { data: clientes } = await supabase
-          .from('clientes')
-          .select('id, nome_completo')
-          .in('id', clienteIds);
+      try {
+        // Usar função otimizada com cache de 2 minutos
+        const stats = await fetchDashboardStats(escritorioId);
         
-        const clientesMap = (clientes || []).reduce((acc, c) => ({ ...acc, [c.id]: c.nome_completo }), {});
+        console.log('� Stats carregados:', stats);
         
-        setProcessosRecentes(recentes.map(p => ({
-          ...p,
-          clienteNome: clientesMap[p.cliente_principal_id] || 'Sem cliente'
-        })));
-      } else {
-        setProcessosRecentes([]);
+        setProcessosAtivos(stats.processosAtivos);
+        setTotalClientes(stats.totalClientes);
+        setPrazosFatais(stats.prazosFatais);
+        setValorTotal(stats.valorTotal);
+        setProcessosRecentes(stats.processosRecentes);
+        setTarefasProximas(stats.tarefasProximas);
+        setProcessosPorArea(stats.processosPorArea);
+        
+      } catch (error) {
+        console.error('❌ Erro ao carregar dashboard:', error);
+      } finally {
+        setLoading(false);
       }
-
-      // 6. Buscar próximas tarefas (próximos 7 dias)
-      const { data: prazos } = await supabase
-        .from('prazos')
-        .select('id, titulo, data_vencimento, tipo, processo_id')
-        .eq('escritorio_id', escritorioId)
-        .gte('data_vencimento', hoje.toISOString().split('T')[0])
-        .lte('data_vencimento', proximosDias.toISOString().split('T')[0])
-        .order('data_vencimento', { ascending: true })
-        .limit(5);
-
-      const { data: audiencias } = await supabase
-        .from('audiencias')
-        .select('id, titulo, data_hora, tipo, processo_id')
-        .eq('escritorio_id', escritorioId)
-        .gte('data_hora', hoje.toISOString())
-        .lte('data_hora', proximosDias.toISOString())
-        .order('data_hora', { ascending: true })
-        .limit(5);
-
-      const { data: reunioes } = await supabase
-        .from('reunioes')
-        .select('id, titulo, data_hora, local, processo_id')
-        .eq('escritorio_id', escritorioId)
-        .gte('data_hora', hoje.toISOString())
-        .lte('data_hora', proximosDias.toISOString())
-        .order('data_hora', { ascending: true })
-        .limit(5);
-
-      // Combinar e ordenar tarefas
-      const todasTarefas = [
-        ...(prazos || []).map(p => ({ ...p, tipo_tarefa: 'Prazo', data: p.data_vencimento })),
-        ...(audiencias || []).map(a => ({ ...a, tipo_tarefa: 'Audiência', data: a.data_hora })),
-        ...(reunioes || []).map(r => ({ ...r, tipo_tarefa: 'Reunião', data: r.data_hora }))
-      ].sort((a, b) => new Date(a.data) - new Date(b.data)).slice(0, 5);
-
-      setTarefasProximas(todasTarefas);
-
-      // 7. Calcular processos por área
-      const areaCount = {};
-      (processos || []).forEach(p => {
-        const area = p.area_direito || 'Outro';
-        areaCount[area] = (areaCount[area] || 0) + 1;
-      });
-
-      const total = processosCount || 1;
-      const areas = Object.entries(areaCount).map(([area, quantidade]) => ({
-        area,
-        quantidade,
-        percentual: Math.round((quantidade / total) * 100)
-      }));
-
-      setProcessosPorArea(areas);
-      setLoading(false);
     };
 
     fetchDashboardData();

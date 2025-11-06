@@ -213,12 +213,13 @@ const Publications = () => {
           {/* Status Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-card p-4 rounded-lg border border-border">
-              <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Novas</p>
                   <p className="text-2xl font-bold text-foreground">{newPublicationsCount}</p>
                 </div>
-                <Icon name="Bell" size={24} className="text-warning" />
+                {/* Removido sino extra — manter apenas o NotificationBell no Header (sistema de tarefas). */}
+                <Icon name="Inbox" size={24} className="text-warning" />
               </div>
             </div>
             
