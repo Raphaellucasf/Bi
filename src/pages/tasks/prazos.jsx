@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import Sidebar from "../../components/ui/Sidebar";
 import Header from "../../components/ui/Header";
 import { supabase } from "../../services/supabaseClient";
+import { syncEventToGoogle } from "../../services/googleCalendarService";
 import Select from '../../components/ui/Select';
 
 const Prazos = () => {
@@ -72,12 +73,24 @@ const Prazos = () => {
       data_andamento: form.data_andamento ? new Date(form.data_andamento).toISOString() : null,
       created_at: new Date().toISOString(),
     };
-    const { error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]);
+    const { data, error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]).select();
     if (supaError) {
       setError('Erro ao salvar andamento: ' + JSON.stringify(supaError));
       setLoading(false);
       return;
     }
+    
+    // Sincronizar com Google Calendar se conectado
+    if (data && data[0] && localStorage.getItem('google_calendar_token')) {
+      try {
+        console.log('🔄 Sincronizando prazo com Google Calendar...');
+        const googleEventId = await syncEventToGoogle(data[0]);
+        console.log('✅ Prazo sincronizado! ID no Google:', googleEventId);
+      } catch (error) {
+        console.error('⚠️ Erro ao sincronizar prazo:', error);
+      }
+    }
+    
     setForm({ processo_id: '', titulo: '', descricao: '', tipo: 'Prazo', data_andamento: '' });
     setLoading(false);
     fetchAndamentos();

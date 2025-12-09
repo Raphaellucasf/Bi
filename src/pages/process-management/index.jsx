@@ -772,7 +772,14 @@ const ProcessManagement = () => {
 					) : (
 						<div className="bg-white rounded-xl shadow-sm border border-border p-6 flex flex-col gap-2">
 							{allProcesses.map(proc => (
-								<ProcessListItem key={proc.id} processo={proc} />
+								<ProcessListItem 
+									key={proc.id} 
+									processo={proc}
+									onEdit={handleEditProcess}
+									onShowDetails={handleShowDetails}
+									onDelete={handleDeleteProcess}
+									isDeleting={deleteLoading && deletingId === proc.id}
+								/>
 							))}
 							{allLoading && <div className="text-center text-muted-foreground py-8">Carregando...</div>}
 							{!allLoading && allProcesses.length === 0 && <div className="text-center text-muted-foreground py-8">Nenhum processo encontrado.</div>}

@@ -29,7 +29,7 @@ const fetchRecentClients = async (escritorioId) => {
   
   const { data } = await supabase
     .from('clientes')
-    .select('id, nome_completo, cpf_cnpj, tipo_pessoa, status, escritorio_id')
+    .select('*')
     .eq('escritorio_id', escritorioId)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
@@ -84,7 +84,7 @@ const ClientManagement = () => {
         // Buscar todos os clientes para tab 'Todos' (paginado)
         const { data: allData, count } = await supabase
           .from('clientes')
-          .select('id, nome_completo, cpf_cnpj, escritorio_id', { count: 'exact' })
+          .select('*', { count: 'exact' })
           .eq('escritorio_id', eid)
           .order('nome_completo', { ascending: true })
           .range(0, 29);
@@ -111,7 +111,7 @@ const ClientManagement = () => {
         
         const { data, count } = await supabase
           .from('clientes')
-          .select('id, nome_completo, cpf_cnpj, escritorio_id', { count: 'exact' })
+          .select('*', { count: 'exact' })
           .eq('escritorio_id', escritorioId)
           .order('nome_completo', { ascending: true })
           .range(from, to);
@@ -208,10 +208,17 @@ const ClientManagement = () => {
       data_nascimento: formatOrNull(form.data_nascimento),
       data_entrevista: formatOrNull(form.data_entrevista)
     };
+    
+    // 🔍 DEBUG: Ver o que está sendo enviado
+    console.log('📋 Dados do formulário:', form);
+    console.log('💾 Dados para salvar:', formToSave);
+    console.log('📍 Endereço:', formToSave.endereco);
+    
     let result;
     try {
       if (editingClient && editingClient.id) {
         // Update
+        console.log('🔄 Atualizando cliente ID:', editingClient.id);
         result = await supabase.from('clientes').update({ ...formToSave, updated_at: new Date().toISOString() }).eq('id', editingClient.id);
       } else {
         // Create
@@ -225,8 +232,10 @@ const ClientManagement = () => {
         ]);
       }
       if (result.error) {
+        console.error('❌ Erro Supabase:', result.error);
         alert('Erro ao salvar cliente: ' + (result.error.message || result.error.description || result.error));
       } else {
+        console.log('✅ Cliente salvo com sucesso!', result.data);
         closeModal();
         // 🚀 Atualizar cache após save
         await refetchClients();

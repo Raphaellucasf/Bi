@@ -1,0 +1,101 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../services/supabaseClient';
+import Sidebar from '../../components/ui/Sidebar';
+import Header from '../../components/ui/Header';
+import './AcompanhamentoProcessual.css';
+
+const AcompanhamentoProcessual = () => {
+  const [processos, setProcessos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    carregarProcessos();
+  }, []);
+
+  const carregarProcessos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('acompanhamento_processos')
+        .select('*')
+        .order('sincronizado_em', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setProcessos(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar processos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSidebarToggle = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Sidebar isCollapsed={sidebarCollapsed} onToggle={handleSidebarToggle} />
+      <Header sidebarCollapsed={sidebarCollapsed} />
+      <main className={"transition-all duration-300 pt-16 " + (sidebarCollapsed ? 'ml-16' : 'ml-60')}>
+        <div className="acompanhamento-container">
+          <div className="acompanhamento-header">
+            <h1>📋 Acompanhamento Processual PJe</h1>
+            <p>Processos sincronizados automaticamente do sistema PJe</p>
+          </div>
+          {loading ? (
+            <div className="acompanhamento-loading">
+              <div className="spinner"></div>
+              <p>Carregando processos sincronizados...</p>
+            </div>
+          ) : (
+            <div className="acompanhamento-content">
+              <div className="processos-stats">
+                <div className="stat-card">
+                  <span className="stat-label">Total de Processos</span>
+                  <span className="stat-value">{processos.length}</span>
+                </div>
+              </div>
+              {processos.length === 0 ? (
+                <div className="empty-state">
+                  <p>Nenhum processo sincronizado ainda.</p>
+                  <p className="empty-hint">Execute o bot de sincronização para buscar dados do PJe.</p>
+                </div>
+              ) : (
+                <div className="processos-list">
+                  {processos.map((processo, index) => (
+                    <div key={index} className="processo-card">
+                      <div className="processo-header">
+                        <h3>{processo.numero_processo || 'Sem número'}</h3>
+                        {processo.fonte && (<span className={'fonte-badge ' + processo.fonte}>{processo.fonte}</span>)}
+                      </div>
+                      {processo.andamento_titulo && (
+                        <div className="processo-detail">
+                          <strong>Último andamento:</strong>
+                          <p>{processo.andamento_titulo}</p>
+                        </div>
+                      )}
+                      {processo.sincronizado_em && (
+                        <div className="processo-footer">
+                          <span className="sync-time">Sincronizado em: {formatDate(processo.sincronizado_em)}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default AcompanhamentoProcessual;

@@ -16,3 +16,8 @@ vite.config.*s.*
 temp/
 *.temp
 *.new
+
+release/
+electron.js
+*.exe
+*.asar

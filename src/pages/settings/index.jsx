@@ -4,6 +4,7 @@ import { supabase } from "../../services/supabaseClient";
 import PatronoModal from "./PatronoModal";
 import { formatCNPJ, formatTelefone } from "../../utils/formatters";
 import { useNavigate } from "react-router-dom";
+import { externalSyncService } from "../../services/externalSupabaseSync";
 
 
 const getEscritorioId = async () => {
@@ -26,7 +27,16 @@ const Settings = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [escritorioId, setEscritorioId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncStats, setSyncStats] = useState(externalSyncService.getStats());
   const navigate = useNavigate();
+
+  // Atualizar estatísticas de sync a cada 5 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSyncStats(externalSyncService.getStats());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -122,15 +132,91 @@ const Settings = () => {
         </div>
       </div>
       <div className="mb-6">
+        <div className="text-lg font-semibold mb-2">Sincronização Automática</div>
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-2xl">{syncStats.isRunning ? '🔄' : '⏸️'}</span>
+            <div className="flex-1">
+              <div className="font-medium">
+                {syncStats.isRunning ? 'Sincronização Ativa' : 'Sincronização Pausada'}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Monitora Supabase externo a cada 60 segundos
+              </div>
+            </div>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${syncStats.isRunning ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+              {syncStats.isRunning ? 'Online' : 'Offline'}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="text-center p-3 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{syncStats.syncCount}</div>
+              <div className="text-xs text-gray-600">Sincronizações</div>
+            </div>
+            <div className="text-center p-3 bg-red-50 rounded-lg">
+              <div className="text-2xl font-bold text-red-600">{syncStats.errorCount}</div>
+              <div className="text-xs text-gray-600">Erros</div>
+            </div>
+            <div className="text-center p-3 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">
+                {syncStats.lastSync ? new Date(syncStats.lastSync).toLocaleTimeString('pt-BR') : '--:--'}
+              </div>
+              <div className="text-xs text-gray-600">Último Sync</div>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button 
+              variant="default" 
+              onClick={() => {
+                externalSyncService.syncNow();
+                setTimeout(() => setSyncStats(externalSyncService.getStats()), 500);
+              }}
+              disabled={!syncStats.isRunning}
+            >
+              🔄 Sincronizar Agora
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                if (syncStats.isRunning) {
+                  externalSyncService.stop();
+                } else {
+                  externalSyncService.start();
+                }
+                setSyncStats(externalSyncService.getStats());
+              }}
+            >
+              {syncStats.isRunning ? '⏸️ Pausar' : '▶️ Iniciar'}
+            </Button>
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                externalSyncService.resetStats();
+                setSyncStats(externalSyncService.getStats());
+              }}
+            >
+              🗑️ Resetar
+            </Button>
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+            <strong>ℹ️ Info:</strong> A sincronização busca novos andamentos no banco externo e cria automaticamente Clientes → Processos → Tarefas.
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6">
         <div className="text-lg font-semibold mb-2">Informações do Sistema</div>
         <div className="bg-white rounded-xl shadow p-4 grid grid-cols-2 gap-4">
           <div>
             <div className="font-medium">Versão</div>
-            <div className="text-muted-foreground">1.0.0</div>
+            <div className="text-muted-foreground">2.0.0</div>
           </div>
           <div>
             <div className="font-medium">Última atualização</div>
-            <div className="text-muted-foreground">Janeiro 2024</div>
+            <div className="text-muted-foreground">Novembro 2024</div>
           </div>
         </div>
       </div>

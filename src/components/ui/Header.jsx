@@ -40,7 +40,7 @@ const Header = ({ sidebarCollapsed = false }) => {
 
   const primaryNavItems = [
     {
-      label: 'Dashboard',
+      label: 'Resumo Executivo',
       path: '/dashboard',
       icon: 'LayoutDashboard'
     },
@@ -88,7 +88,7 @@ const Header = ({ sidebarCollapsed = false }) => {
       case '/client-portal':
         return 'Portal do Cliente';
       default:
-        return 'Torá Legal';
+        return 'Meritus';
     }
   };
 

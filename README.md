@@ -1,6 +1,6 @@
-# React
+# Meritus - Sistema Jurídico
 
-A modern React-based project utilizing the latest frontend technologies and tools for building responsive web applications.
+Sistema completo de gestão jurídica desenvolvido com React, oferecendo ferramentas modernas para gerenciamento de processos, clientes, documentos e compromissos.
 
 ## 🚀 Features
 

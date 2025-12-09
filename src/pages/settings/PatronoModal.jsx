@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import Button from "../../components/ui/Button";
-import { formatCNPJ, formatTelefone } from "../../utils/formatters";
+import { formatCPF_CNPJ, formatTelefone } from "../../utils/formatters";
 
 // Campos da tabela patrono
 // id (uuid, gerado automaticamente)
 // escritorio_id (uuid, obrigatório)
 // created_at (timestamp, gerado automaticamente)
 // razao_social (text, obrigatório)
-// cnpj (text, obrigatório)
+// cnpj (text, pode ser CPF ou CNPJ, obrigatório)
 // telefone (text, opcional)
 // email (text, opcional)
 // nome_fantasia (text, opcional)
@@ -32,7 +32,7 @@ const PatronoModal = ({ open, onClose, onSave, escritorioId }) => {
 
   const handleBlur = (field) => {
     if (field === "cnpj") {
-      setForm(f => ({ ...f, cnpj: formatCNPJ(f.cnpj) }));
+      setForm(f => ({ ...f, cnpj: formatCPF_CNPJ(f.cnpj) }));
     }
     if (field === "telefone") {
       setForm(f => ({ ...f, telefone: formatTelefone(f.telefone) }));
@@ -63,8 +63,15 @@ const PatronoModal = ({ open, onClose, onSave, escritorioId }) => {
             <input className="w-full border rounded px-3 py-2" value={form.razao_social} onChange={e => handleChange("razao_social", e.target.value)} required />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">CNPJ *</label>
-            <input className="w-full border rounded px-3 py-2" value={form.cnpj} onChange={e => handleChange("cnpj", e.target.value)} onBlur={() => handleBlur("cnpj") } required />
+            <label className="block text-sm font-medium mb-1">CPF/CNPJ *</label>
+            <input 
+              className="w-full border rounded px-3 py-2" 
+              value={form.cnpj} 
+              onChange={e => handleChange("cnpj", e.target.value)} 
+              onBlur={() => handleBlur("cnpj")} 
+              placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              required 
+            />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Telefone</label>

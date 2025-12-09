@@ -1,6 +1,10 @@
 {
-  "name": "tora-legal",
-  "version": "0.1.0",
+  "name": "meritus",
+  "version": "1.0.0",
+  "description": "Sistema completo de gestão jurídica",
+  "author": "Meritus",
+  "main": "electron.js",
+  "homepage": "./",
   "private": true,
   "rocketCritical": {
     "dependencies": [
@@ -27,6 +31,7 @@
     "warning": "🚨 CRITICAL: DO NOT REMOVE OR MODIFY ABOVE DEPENDENCIES - Required for app functionality"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
     "@dhiwise/component-tagger": "^1.0.10",
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",
@@ -48,7 +53,9 @@
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "date-fns": "^4.1.0",
+    "docx": "^9.5.1",
     "dotenv": "^16.6.1",
+    "file-saver": "^2.0.5",
     "framer-motion": "^10.16.4",
     "lucide-react": "^0.484.0",
     "react": "^18.2.0",
@@ -72,7 +79,12 @@
     "build": "vite build --sourcemap",
     "build:prod": "vite build --mode production",
     "serve": "vite preview",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "electron .",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "dist": "npm run build && electron-builder"
   },
   "eslintConfig": {
     "extends": [
@@ -99,9 +111,45 @@
     "@tailwindcss/typography": "^0.5.16",
     "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "10.4.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
     "postcss": "^8.5.6",
     "tailwindcss": "3.4.6",
     "vite": "^5.4.20",
     "vite-tsconfig-paths": "3.6.0"
+  },
+  "build": {
+    "appId": "com.meritus.app",
+    "productName": "Meritus",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "build/**/*",
+      "electron.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/meritus-icon.png",
+      "artifactName": "Meritus-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true,
+      "shortcutName": "Meritus",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": "Meritus"
+    },
+    "extraMetadata": {
+      "name": "meritus"
+    }
   }
 }

@@ -43,6 +43,12 @@ const EventDetailsModal = ({ event, onClose, onComplete, onDelete }) => {
               `}>
                 {extendedProps.tipo}
               </span>
+              {extendedProps.origem === 'google_calendar' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <Icon name="Calendar" size={12} className="mr-1" />
+                  Google Calendar
+                </span>
+              )}
               {extendedProps.concluido && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   Concluído

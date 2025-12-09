@@ -1,8 +1,28 @@
+export function formatCPF(value) {
+  return value
+    .replace(/\D/g, "")
+    .replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4")
+    .slice(0, 14);
+}
+
 export function formatCNPJ(value) {
   return value
   .replace(/\D/g, "")
-  .replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, "$1.$2.$3-$4.$5")
+  .replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, "$1.$2.$3/$4-$5")
     .slice(0, 18);
+}
+
+// Formata automaticamente como CPF ou CNPJ dependendo do tamanho
+export function formatCPF_CNPJ(value) {
+  const numbers = value.replace(/\D/g, "");
+  
+  if (numbers.length <= 11) {
+    // É CPF (11 dígitos)
+    return formatCPF(numbers);
+  } else {
+    // É CNPJ (14 dígitos)
+    return formatCNPJ(numbers);
+  }
 }
 
 export function formatTelefone(value) {
@@ -49,4 +69,25 @@ export function formatProperName(text) {
       return cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1) + punctuation;
     })
     .join(' ');
+}
+
+/**
+ * Formata valor em centavos para moeda brasileira (R$)
+ * @param {number|string} valueInCents - Valor em centavos (ex: 47902993 = R$ 479.029,93)
+ * @returns {string} - Valor formatado (ex: "R$ 479.029,93")
+ */
+export function formatCurrency(valueInCents) {
+  if (!valueInCents || valueInCents === 0) return 'R$ 0,00';
+  
+  // Converte para número se for string
+  const numValue = typeof valueInCents === 'string' ? parseFloat(valueInCents) : valueInCents;
+  
+  // Divide por 100 para converter centavos em reais
+  const valueInReais = numValue / 100;
+  
+  // Formata usando Intl.NumberFormat
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(valueInReais);
 }

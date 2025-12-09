@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import Button from "../../../components/ui/Button";
 import { FaseAndamentoSelector } from '../../../components/ui/FaseAndamentoSelector';
+import { juliaService } from '../../../services/juliaAIService';
+import { formatCurrency } from '../../../utils/formatters';
 
 
 function ProcessoDetalhesModal({ processoId, open, onClose }) {
@@ -42,6 +44,10 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
         }
         console.log('DEBUG [ProcessoDetalhes] processo:', data);
         setProcesso(data);
+        
+        // 🤖 Definir contexto do processo na Julia
+        juliaService.setProcessoContext(data);
+        
         // Carregar fase e andamento do processo
         setFaseId(data.fase_id || null);
         setAndamentoId(data.andamento_id || null);
@@ -79,6 +85,13 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
     // Documentos
     supabase.from('documentos').select('*').eq('processo_id', processoId).then(({ data }) => setDocumentos(data || []));
   }, [processoId, open]);
+
+  // Limpar contexto ao fechar modal
+  useEffect(() => {
+    if (!open) {
+      juliaService.clearProcessoContext();
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -140,6 +153,12 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
                     <div className="bg-gray-50 rounded p-4">
                       <div className="font-bold mb-2 flex items-center gap-2">💼 Detalhes do Processo</div>
                       <div><span className="font-semibold">Nº Processo:</span> {processo.numero_processo || processo.numero || '-'}</div>
+                      {processo.valor_causa && (
+                        <div>
+                          <span className="font-semibold">Valor da Causa:</span>{' '}
+                          {formatCurrency(processo.valor_causa)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
@@ -148,6 +167,18 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
           )}
           {aba === 1 && (
             <div>
+              {/* Banner Julia */}
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                <div className="text-3xl">🤖</div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-purple-900 mb-1">Julia pode atualizar andamentos para você!</h4>
+                  <p className="text-sm text-purple-700">
+                    Peça para a Julia: "atualiza andamento para execução" ou "muda fase para recurso"
+                  </p>
+                </div>
+                <div className="text-purple-600 animate-pulse">✨</div>
+              </div>
+
               {/* Seletor de Fase e Andamento Processual - Substitui o botão "+ Novo Andamento" */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 sm:p-6 mb-6">
                 <FaseAndamentoSelector

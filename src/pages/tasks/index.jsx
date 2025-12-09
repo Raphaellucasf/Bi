@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
+import { syncEventToGoogle } from '../../services/googleCalendarService';
 import Sidebar from '../../components/ui/Sidebar';
 import Header from '../../components/ui/Header';
 import Button from '../../components/ui/Button';
@@ -101,6 +102,16 @@ const Tasks = () => {
     const { data, error } = await supabase.from('andamentos').insert([taskToSave]).select();
     if (!error && data) {
       setTasks(prev => [data[0], ...prev]);
+      
+      // Sincronizar com Google Calendar se conectado
+      if (localStorage.getItem('google_calendar_token')) {
+        try {
+          await syncEventToGoogle(data[0]);
+          console.log('✅ Evento sincronizado com Google Calendar');
+        } catch (error) {
+          console.error('⚠️ Erro ao sincronizar com Google Calendar:', error);
+        }
+      }
     }
   };
 

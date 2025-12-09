@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense, lazy } from "react";
-import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, useLocation } from "react-router-dom";
+import { HashRouter, Routes as RouterRoutes, Route, Navigate, useLocation } from "react-router-dom";
 import ScrollToTop from "components/ScrollToTop";
 import ErrorBoundary from "components/ErrorBoundary";
 import NotFound from "pages/NotFound";
@@ -22,6 +22,7 @@ const CalendarPage = lazy(() => import('./pages/calendar'));
 const ClientPortal = lazy(() => import('./pages/client-portal'));
 const Detetive = lazy(() => import('./pages/detetive'));
 const Monitoring = lazy(() => import('./pages/monitoring'));
+const AcompanhamentoProcessual = lazy(() => import('./pages/case-management/AcompanhamentoProcessual'));
 
 // Páginas de login carregadas imediatamente (critical path)
 import LoginPage from './pages/login/LoginPage';
@@ -101,7 +102,7 @@ function RequireAuth({ children }) {
 
 const Routes = () => {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ErrorBoundary>
         <ScrollToTop />
         <Suspense fallback={<PageLoader />}>
@@ -126,6 +127,7 @@ const Routes = () => {
             <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
             <Route path="/detetive" element={<RequireAuth><Detetive /></RequireAuth>} />
             <Route path="/monitoring" element={<RequireAuth><Monitoring /></RequireAuth>} />
+            <Route path="/acompanhamento-processual" element={<RequireAuth><AcompanhamentoProcessual /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/support" element={<RequireAuth><Support /></RequireAuth>} />
             {/* Legacy route redirect */}
@@ -134,7 +136,7 @@ const Routes = () => {
           </RouterRoutes>
         </Suspense>
       </ErrorBoundary>
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 

@@ -25,7 +25,7 @@ export const useSyncGoogleCalendar = () => {
       // 2. Sincronizar com Google Calendar (se conectado)
       const googleEventId = await syncEventToGoogle(data);
 
-      console.log('✅ Evento criado no app:', data.id);
+      console.log('✅ Evento criado no Meritus:', data.id);
       if (googleEventId) {
         console.log('✅ Evento sincronizado no Google Calendar:', googleEventId);
       }

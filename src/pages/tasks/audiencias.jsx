@@ -3,7 +3,9 @@ import React, { useEffect, useState } from "react";
 import Sidebar from "../../components/ui/Sidebar";
 import Header from "../../components/ui/Header";
 import { supabase } from "../../services/supabaseClient";
+import { syncEventToGoogle } from "../../services/googleCalendarService";
 import Select from "../../components/ui/Select";
+import NotificationModal from "../../components/ui/NotificationModal";
 
 const Audiencias = () => {
   const [andamentos, setAndamentos] = useState([]);
@@ -18,6 +20,9 @@ const Audiencias = () => {
   const [error, setError] = useState('');
   const [processos, setProcessos] = useState([]);
   const [processoSearch, setProcessoSearch] = useState('');
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [createdAudiencia, setCreatedAudiencia] = useState(null);
+  const [selectedProcesso, setSelectedProcesso] = useState(null);
 
   const fetchAndamentos = async () => {
     const { data } = await supabase
@@ -96,12 +101,32 @@ const Audiencias = () => {
       data_andamento: form.data_andamento ? new Date(form.data_andamento).toISOString() : null,
       created_at: new Date().toISOString(),
     };
-    const { error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]);
+    const { data, error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]).select();
     if (supaError) {
       setError('Erro ao salvar andamento: ' + JSON.stringify(supaError));
       setLoading(false);
       return;
     }
+    
+    // Sincronizar com Google Calendar se conectado
+    if (data && data[0] && localStorage.getItem('google_calendar_token')) {
+      try {
+        console.log('🔄 Sincronizando audiência com Google Calendar...');
+        const googleEventId = await syncEventToGoogle(data[0]);
+        console.log('✅ Audiência sincronizada! ID no Google:', googleEventId);
+      } catch (error) {
+        console.error('⚠️ Erro ao sincronizar audiência:', error);
+      }
+    }
+    
+    // Buscar dados completos do processo para o modal
+    const processo = processos.find(p => p.id === form.processo_id);
+    
+    // Armazenar dados e abrir modal de notificação
+    setCreatedAudiencia(data[0]);
+    setSelectedProcesso(processo);
+    setShowNotificationModal(true);
+    
     setForm({ processo_id: '', titulo: '', descricao: '', tipo: 'Audiência', data_andamento: '' });
     setLoading(false);
     fetchAndamentos();
@@ -192,6 +217,14 @@ const Audiencias = () => {
           )}
         </div>
       </main>
+
+      {/* Modal de Notificação */}
+      <NotificationModal
+        isOpen={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        audiencia={createdAudiencia}
+        processo={selectedProcesso}
+      />
     </div>
   );
 };

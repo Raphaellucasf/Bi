@@ -13,7 +13,7 @@ const Sidebar = ({ isCollapsed = false, onToggle }) => {
     {
       title: 'NAVEGAÇÃO PRINCIPAL',
       items: [
-        { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard', tooltip: 'Visão geral da prática' },
+        { label: 'Resumo Executivo', path: '/dashboard', icon: 'LayoutDashboard', tooltip: 'Visão geral da prática' },
         { label: 'Processos', path: '/process-management', icon: 'FileText', tooltip: 'Gerenciamento de processos' },
         { label: 'Clientes', path: '/client-management', icon: 'Users', tooltip: 'Gerenciamento de clientes' },
   { label: 'Faturamento', path: '/faturamento-tracking', icon: 'DollarSign', tooltip: 'Controle de faturamento' },
@@ -39,6 +39,7 @@ const Sidebar = ({ isCollapsed = false, onToggle }) => {
       items: [
         { label: 'Detetive', path: '/detetive', icon: 'Search', tooltip: 'Busca de bens e informações' },
         { label: 'Acompanhamento', path: '/monitoring', icon: 'Globe', tooltip: 'Acompanhamento processual' },
+        { label: 'Sincronização PJe', path: '/acompanhamento-processual', icon: 'RefreshCw', tooltip: 'Andamentos sincronizados do PJe' },
       ]
     },
     {
@@ -102,31 +103,18 @@ const Sidebar = ({ isCollapsed = false, onToggle }) => {
         <div className="flex items-center h-16 px-4 border-b border-border">
           <div className="flex items-center space-x-3">
             <div className="flex-shrink-0">
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 32 32"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-primary"
-              >
-                <rect width="32" height="32" rx="6" fill="currentColor" />
-                <path
-                  d="M8 8h16v3H8V8zm0 5h16v3H8v-3zm0 5h16v3H8v-3zm0 5h10v3H8v-3z"
-                  fill="white"
-                />
-                <path
-                  d="M22 6l2 2-2 2-2-2z"
-                  fill="var(--color-accent)"
-                />
-              </svg>
+              <img 
+                src="/meritus-icon.png" 
+                alt="Meritus Logo" 
+                className="w-8 h-8 rounded-lg object-contain"
+              />
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">
                 <span className="text-lg font-semibold text-foreground">
-                  Torá
+                  Meritus
                 </span>
-                <span className="text-xs text-muted-foreground">Legal</span>
+                <span className="text-xs text-muted-foreground">Sistema Jurídico</span>
               </div>
             )}
           </div>

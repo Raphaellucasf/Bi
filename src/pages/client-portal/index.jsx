@@ -173,7 +173,7 @@ const ClientPortal = () => {
                 </div>
                 <div>
                   <h1 className="text-xl font-semibold text-foreground">
-                    Portal do Cliente - Torá Legal
+                    Portal do Cliente - Meritus
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     Acompanhe o andamento do seu processo

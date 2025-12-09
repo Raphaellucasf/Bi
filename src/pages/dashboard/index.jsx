@@ -182,7 +182,7 @@ const Dashboard = () => {
           <div className="flex items-center justify-center h-screen">
             <div className="text-center">
               <Icon name="Loader" size={48} className="animate-spin text-primary mx-auto mb-4" />
-              <p className="text-muted-foreground">Carregando dashboard...</p>
+              <p className="text-muted-foreground">Carregando resumo executivo...</p>
             </div>
           </div>
         </main>
@@ -199,7 +199,7 @@ const Dashboard = () => {
           {/* Top Row */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+              <h1 className="text-3xl font-bold text-foreground">Resumo Executivo</h1>
               <p className="text-muted-foreground">Visão geral do escritório jurídico</p>
             </div>
             <Button 

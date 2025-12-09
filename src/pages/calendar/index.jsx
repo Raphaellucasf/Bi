@@ -9,7 +9,9 @@ import Header from '../../components/ui/Header';
 import { supabase } from '../../services/supabaseClient';
 import EventDetailsModal from './components/EventDetailsModal';
 import { useSyncGoogleCalendar } from '../../hooks/useSyncGoogleCalendar';
+import { importEventsFromGoogle } from '../../services/googleCalendarService';
 import Icon from '../../components/AppIcon';
+import './calendar-custom.css';
 
 
 const CalendarPage = () => {
@@ -60,13 +62,32 @@ const CalendarPage = () => {
     }
   };
 
-  const getEventColor = (tipo) => {
+  const getEventColor = (andamento) => {
+    // Se veio do Google Calendar, usar a cor do Google
+    if (andamento.origem === 'google_calendar' && andamento.google_calendar_color) {
+      const googleColors = {
+        '1': '#7986CB', // Lavanda
+        '2': '#33B679', // Sálvia
+        '3': '#8E24AA', // Uva
+        '4': '#E67C73', // Flamingo
+        '5': '#F6BF26', // Banana
+        '6': '#F4511E', // Tangerina
+        '7': '#039BE5', // Pavão
+        '8': '#616161', // Grafite
+        '9': '#3F51B5', // Mirtilo
+        '10': '#0B8043', // Manjericão
+        '11': '#D50000', // Tomate
+      };
+      return googleColors[andamento.google_calendar_color] || '#9E9E9E';
+    }
+    
+    // Cores padrão do Meritus
     const colors = {
       'Audiência': '#4CAF50', // Verde
       'Prazo': '#F44336',     // Vermelho
       'Reunião': '#2196F3'    // Azul
     };
-    return colors[tipo] || '#9E9E9E';
+    return colors[andamento.tipo] || '#9E9E9E';
   };
 
   const fetchAndamentos = async () => {
@@ -93,12 +114,16 @@ const CalendarPage = () => {
         id: andamento.id,
         title: andamento.titulo,
         start: andamento.data_andamento,
-        backgroundColor: getEventColor(andamento.tipo),
+        end: andamento.data_fim,
+        backgroundColor: getEventColor(andamento),
+        borderColor: getEventColor(andamento),
         extendedProps: {
           tipo: andamento.tipo,
           processo: andamento.processo,
           descricao: andamento.descricao,
-          concluido: andamento.concluido
+          concluido: andamento.concluido,
+          origem: andamento.origem,
+          google_calendar_color: andamento.google_calendar_color
         }
       }));
 
@@ -110,10 +135,33 @@ const CalendarPage = () => {
     }
   };
 
+  // Função para sincronizar eventos do Google
+  const syncWithGoogle = async () => {
+    if (localStorage.getItem('google_calendar_token')) {
+      try {
+        console.log('🔄 Iniciando sincronização com Google Calendar...');
+        await importEventsFromGoogle();
+        console.log('✅ Sincronização concluída');
+      } catch (error) {
+        console.error('❌ Erro na sincronização:', error);
+      }
+    }
+  };
+
   useEffect(() => {
-    fetchAndamentos();
+    const init = async () => {
+      await fetchAndamentos();
+      await syncWithGoogle();
+    };
+    
+    init();
+    
     // Atualiza a cada 5 minutos para manter sincronizado
-    const interval = setInterval(fetchAndamentos, 300000);
+    const interval = setInterval(async () => {
+      await fetchAndamentos();
+      await syncWithGoogle();
+    }, 300000);
+    
     return () => clearInterval(interval);
   }, []);
 
@@ -129,14 +177,41 @@ const CalendarPage = () => {
               <h1 className="text-3xl font-bold text-foreground">Calendário</h1>
               <p className="text-muted-foreground mt-1">Gerencie seus compromissos e eventos</p>
             </div>
-            {localStorage.getItem('google_calendar_token') && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-                <Icon name="CheckCircle" size={20} className="text-green-600" />
-                <span className="text-sm text-green-700 font-medium">
-                  Sincronizado com Google Calendar
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {localStorage.getItem('google_calendar_token') && (
+                <>
+                  <button
+                    onClick={async () => {
+                      console.log('🔵 Botão "Sincronizar Agora" clicado');
+                      setLoading(true);
+                      try {
+                        await importEventsFromGoogle();
+                        console.log('✅ Importação concluída, atualizando eventos...');
+                        await fetchAndamentos();
+                        console.log('✅ Eventos atualizados com sucesso');
+                        alert('✅ Eventos sincronizados com sucesso!');
+                      } catch (error) {
+                        console.error('❌ Erro ao sincronizar:', error);
+                        alert('❌ Erro ao sincronizar: ' + error.message);
+                      }
+                      setLoading(false);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <Icon name="RefreshCw" size={18} className="text-blue-600" />
+                    <span className="text-sm text-blue-700 font-medium">
+                      Sincronizar Agora
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                    <Icon name="CheckCircle" size={20} className="text-green-600" />
+                    <span className="text-sm text-green-700 font-medium">
+                      Conectado
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-border p-6">
@@ -162,8 +237,16 @@ const CalendarPage = () => {
                   hour12: false
                 }}
                 height="auto"
-                aspectRatio={1.8}
+                contentHeight="auto"
+                aspectRatio={1.5}
+                handleWindowResize={true}
+                windowResizeDelay={100}
                 eventDisplay="block"
+                dayMaxEvents={3}
+                dayMaxEventRows={3}
+                moreLinkText={(num) => `+${num} mais`}
+                moreLinkClick="popover"
+                eventOrder="start,-duration,allDay,title"
                 eventClassNames={event => [
                   event.extendedProps?.concluido ? 'opacity-50' : '',
                   'cursor-pointer'

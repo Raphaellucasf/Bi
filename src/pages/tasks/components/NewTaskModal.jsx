@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from '../../../services/supabaseClient';
+import { syncEventToGoogle } from '../../../services/googleCalendarService';
 
 const initialState = {
   titulo: '',
@@ -52,7 +53,7 @@ const NewTaskModal = ({ isOpen, onClose, onSave }) => {
       data_andamento: form.data_andamento ? new Date(form.data_andamento).toISOString() : null,
       created_at: new Date()?.toISOString(),
     };
-    const { data, error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]);
+    const { data, error: supaError } = await supabase.from('andamentos').insert([andamentoToSave]).select();
     if (supaError) {
       setError('Erro ao salvar andamento: ' + JSON.stringify(supaError));
       console.error('Supabase insert error:', supaError, andamentoToSave);
@@ -65,9 +66,30 @@ const NewTaskModal = ({ isOpen, onClose, onSave }) => {
       setLoading(false);
       return;
     }
+    
+    // Sincronizar com Google Calendar se conectado
+    const createdEvent = data[0];
+    const googleToken = localStorage.getItem('google_calendar_token');
+    console.log('🔍 Token do Google:', googleToken ? 'Existe' : 'Não existe');
+    
+    if (googleToken) {
+      try {
+        console.log('🔄 Sincronizando evento com Google Calendar...');
+        console.log('📦 Dados do evento:', createdEvent);
+        const googleEventId = await syncEventToGoogle(createdEvent);
+        console.log('✅ Evento sincronizado! ID no Google:', googleEventId);
+      } catch (error) {
+        console.error('⚠️ Erro ao sincronizar com Google Calendar:', error);
+        console.error('⚠️ Detalhes do erro:', error.response?.data || error.message);
+        // Não bloqueia a criação do evento se falhar a sincronização
+      }
+    } else {
+      console.log('⚠️ Google Calendar não conectado - evento não foi sincronizado');
+    }
+    
     setLoading(false);
     setForm(initialState);
-    if (onSave) onSave(data[0]);
+    if (onSave) onSave(createdEvent);
     onClose();
   };
 
