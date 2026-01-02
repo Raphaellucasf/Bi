@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import Button from "../../../components/ui/Button";
+import NewContentBadge from "../../../components/ui/NewContentBadge";
 import { FaseAndamentoSelector } from '../../../components/ui/FaseAndamentoSelector';
 import { juliaService } from '../../../services/juliaAIService';
 import { formatCurrency } from '../../../utils/formatters';
+import { marcarTodosAndamentosComoVisualizados } from '../../../services/visualizacaoService';
 
 
 function ProcessoDetalhesModal({ processoId, open, onClose }) {
@@ -31,6 +33,10 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
 
   useEffect(() => {
     if (!processoId || !open) return;
+    
+    // Marcar todos os andamentos como visualizados ao abrir o modal
+    marcarTodosAndamentosComoVisualizados(processoId);
+    
     // Detalhes do processo
     supabase
       .from('processos')
@@ -237,11 +243,30 @@ function ProcessoDetalhesModal({ processoId, open, onClose }) {
               ) : (
                 <ul className="space-y-2">
                   {andamentos.map(a => (
-                    <li key={a.id} className="border p-2 rounded bg-white">
-                      <div><strong>Data:</strong> {a.data_final}</div>
-                      <div><strong>Título:</strong> {a.titulo}</div>
-                      <div><strong>Tipo:</strong> {a.tipo}</div>
-                      <div><strong>Descrição:</strong> {a.descricao}</div>
+                    <li key={a.id} className="border p-3 rounded bg-white relative">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <strong>{a.titulo}</strong>
+                          <NewContentBadge 
+                            fonte={a.fonte}
+                            visualizado={a.visualizado}
+                            sincronizadoEm={a.sincronizado_em}
+                          />
+                        </div>
+                        {a.fonte && (
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                            {a.fonte}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600"><strong>Data:</strong> {a.data_final}</div>
+                      <div className="text-sm text-gray-600"><strong>Tipo:</strong> {a.tipo}</div>
+                      {a.descricao && <div className="text-sm mt-2">{a.descricao}</div>}
+                      {a.sincronizado_em && (
+                        <div className="text-xs text-gray-400 mt-2">
+                          🔄 Sincronizado: {new Date(a.sincronizado_em).toLocaleString('pt-BR')}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -3,14 +3,28 @@ import { supabase } from '../../services/supabaseClient';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../AppIcon';
 import NotificationBell from './NotificationBell';
+import UnreadCountBadge from './UnreadCountBadge';
 import Button from './Button';
 
 const Header = ({ sidebarCollapsed = false }) => {
   const [userId, setUserId] = useState(null);
+  const [escritorioId, setEscritorioId] = useState(null);
+  
   useEffect(() => {
     async function fetchUserId() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
+      if (user) {
+        setUserId(user.id);
+        // Buscar escritorio_id
+        const { data: perfis } = await supabase
+          .from('perfis')
+          .select('escritorio_id')
+          .eq('user_id', user.id)
+          .limit(1);
+        if (perfis && perfis[0]) {
+          setEscritorioId(perfis[0].escritorio_id);
+        }
+      }
     }
     fetchUserId();
   }, []);
@@ -157,6 +171,7 @@ const Header = ({ sidebarCollapsed = false }) => {
           
           <div className="flex items-center space-x-4">
             {getPageActions()}
+            <UnreadCountBadge escritorioId={escritorioId} />
             <NotificationBell userId={userId} />
 
             {/* User Menu */}

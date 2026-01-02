@@ -1,9 +1,7 @@
 import Button from "../components/ui/Button";
 import Header from "../components/ui/Header";
-
-
 import Sidebar from "../components/ui/Sidebar";
-
+import NewContentBadge from "../components/ui/NewContentBadge";
 import { supabase } from '../services/supabaseClient';
 import React, { useEffect, useState } from "react";
 
@@ -95,14 +93,26 @@ const Monitoring = () => {
               {feed.map(a => (
                 <div key={a.id} className="bg-white border border-border rounded-xl p-6 shadow flex flex-col gap-2">
                   <div className="flex items-center justify-between mb-2">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold text-primary">{a.numero_processo}</span>
-                      <span className="ml-2 text-muted-foreground">{a.titulo_processo}</span>
+                      <span className="text-muted-foreground">{a.titulo_processo}</span>
+                      <NewContentBadge 
+                        fonte={a.fonte}
+                        visualizado={a.visualizado}
+                        sincronizadoEm={a.sincronizado_em}
+                      />
                     </div>
                     <span className="text-xs text-muted-foreground">{new Date(a.data_andamento).toLocaleDateString()}</span>
                   </div>
                   <div className="text-foreground mb-2">{a.descricao}</div>
-                  <Button variant="outline" size="sm" href={`/process-management/${a.processo_id}`}>Ver detalhes</Button>
+                  <div className="flex items-center justify-between">
+                    <Button variant="outline" size="sm" href={`/process-management/${a.processo_id}`}>Ver detalhes</Button>
+                    {a.sincronizado_em && (
+                      <span className="text-xs text-muted-foreground">
+                        🔄 Sincronizado: {new Date(a.sincronizado_em).toLocaleString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

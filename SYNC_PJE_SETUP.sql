@@ -7,25 +7,29 @@
 ALTER TABLE andamentos 
 ADD COLUMN IF NOT EXISTS sincronizado_em TIMESTAMP WITH TIME ZONE,
 ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manual',
-ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE;
+ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS visualizado BOOLEAN DEFAULT FALSE;
 
 -- Comentar colunas
 COMMENT ON COLUMN andamentos.sincronizado_em IS 'Quando foi sincronizado do PJe';
 COMMENT ON COLUMN andamentos.fonte IS 'Origem: pje, manual, bot';
 COMMENT ON COLUMN andamentos.atualizado_em IS 'Última atualização';
+COMMENT ON COLUMN andamentos.visualizado IS 'Se o andamento foi visualizado pelo usuário';
 
 -- 2. ADICIONAR COLUNAS NA TABELA "documentos" (se não existirem)
 ALTER TABLE documentos 
 ADD COLUMN IF NOT EXISTS sincronizado_em TIMESTAMP WITH TIME ZONE,
 ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manual',
 ADD COLUMN IF NOT EXISTS hash_arquivo TEXT,
-ADD COLUMN IF NOT EXISTS tamanho_bytes BIGINT;
+ADD COLUMN IF NOT EXISTS tamanho_bytes BIGINT,
+ADD COLUMN IF NOT EXISTS visualizado BOOLEAN DEFAULT FALSE;
 
 -- Comentar colunas
 COMMENT ON COLUMN documentos.sincronizado_em IS 'Quando foi sincronizado do PJe';
 COMMENT ON COLUMN documentos.fonte IS 'Origem: pje, manual, bot';
 COMMENT ON COLUMN documentos.hash_arquivo IS 'SHA256 para detectar duplicatas';
 COMMENT ON COLUMN documentos.tamanho_bytes IS 'Tamanho do arquivo em bytes';
+COMMENT ON COLUMN documentos.visualizado IS 'Se o documento foi visualizado pelo usuário';
 
 -- 3. CRIAR TABELA "sync_log" (histórico de sincronizações)
 CREATE TABLE IF NOT EXISTS sync_log (
@@ -58,8 +62,10 @@ COMMENT ON TABLE sync_log IS 'Histórico de sincronizações do bot PJe';
 -- 4. CRIAR ÍNDICES PARA PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_andamentos_sincronizado_em ON andamentos(sincronizado_em);
 CREATE INDEX IF NOT EXISTS idx_andamentos_fonte ON andamentos(fonte);
+CREATE INDEX IF NOT EXISTS idx_andamentos_visualizado ON andamentos(visualizado) WHERE visualizado = FALSE;
 CREATE INDEX IF NOT EXISTS idx_documentos_sincronizado_em ON documentos(sincronizado_em);
 CREATE INDEX IF NOT EXISTS idx_documentos_hash ON documentos(hash_arquivo);
+CREATE INDEX IF NOT EXISTS idx_documentos_visualizado ON documentos(visualizado) WHERE visualizado = FALSE;
 CREATE INDEX IF NOT EXISTS idx_sync_log_processo_id ON sync_log(processo_id);
 CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
 CREATE INDEX IF NOT EXISTS idx_sync_log_iniciado_em ON sync_log(iniciado_em DESC);
